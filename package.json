@@ -1,0 +1,59 @@
+{
+  "name": "clauder-hub",
+  "version": "0.1.0",
+  "description": "A local dashboard that runs, watches and automates Claude Code sessions for one project",
+  "license": "MIT",
+  "author": "goldynlabs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goldynlabs/clauder-hub.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "dashboard",
+    "terminal",
+    "automation"
+  ],
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "bin": {
+    "clauder-hub": "bin/clauder-hub.mjs"
+  },
+  "files": [
+    "LICENSE",
+    "logo.svg",
+    "bin",
+    "server/dist",
+    "web/dist"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build:server && npm -w web run build",
+    "typecheck": "npm -w server run typecheck && npm -w web run typecheck",
+    "prepare": "npm run build",
+    "build:server": "esbuild server/src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=server/dist/index.js --external:better-sqlite3 --external:@lydell/node-pty --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\""
+  },
+  "dependencies": {
+    "@lydell/node-pty": "1.2.0-beta.18",
+    "better-sqlite3": "^13.0.3",
+    "material-icon-theme": "^5.40.0"
+  },
+  "devDependencies": {
+    "cors": "^2.8.5",
+    "croner": "^9.1.0",
+    "esbuild": "^0.28.2",
+    "express": "^4.21.2",
+    "ignore": "^7.0.14",
+    "nanoid": "^5.0.9",
+    "tsx": "^4.19.2",
+    "ws": "^8.18.0",
+    "zod": "^4.1.13"
+  }
+}

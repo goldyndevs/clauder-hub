@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+
+# Runtime state the tool writes into whatever project it runs in.
+.clauder-hub/
+
+# The project the dev launcher was last pointed at; per-machine.
+.dev-project
+
+.claude/settings.local.json
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+
+.env
+.env.*
+!.env.example

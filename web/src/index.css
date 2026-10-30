@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Anthropic brand, light */
+    --background: 48 33% 97%;
+    --foreground: 60 3% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 60 3% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 60 3% 8%;
+    --primary: 15 63% 60%;
+    --primary-foreground: 48 33% 97%;
+    --secondary: 50 21% 89%;
+    --secondary-foreground: 60 3% 8%;
+    --muted: 50 21% 89%;
+    --muted-foreground: 49 7% 45%;
+    --accent: 50 21% 89%;
+    --accent-foreground: 60 3% 8%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 48 33% 97%;
+    --success: 142 58% 36%;
+    --success-foreground: 48 33% 97%;
+    --border: 50 21% 89%;
+    --input: 50 21% 89%;
+    --ring: 15 63% 60%;
+    --radius: 0.5rem;
+
+    --severity-critical: 0 72% 51%;
+    --severity-warning: 38 92% 50%;
+    --severity-suggestion: 142 58% 36%;
+    /* One hue for magnitude in every chart: the primary orange (#d97757 light, #d6714f dark, stepped to sit in the dark lightness band). */
+    --series: 15 63% 60%;
+  }
+
+  .dark {
+    --background: 60 3% 8%;
+    --foreground: 48 33% 97%;
+    --card: 60 3% 11%;
+    --card-foreground: 48 33% 97%;
+    --popover: 60 3% 11%;
+    --popover-foreground: 48 33% 97%;
+    --primary: 15 63% 60%;
+    --primary-foreground: 48 33% 97%;
+    --secondary: 60 3% 16%;
+    --secondary-foreground: 48 33% 97%;
+    --muted: 60 3% 16%;
+    --muted-foreground: 49 7% 60%;
+    --accent: 60 3% 16%;
+    --accent-foreground: 48 33% 97%;
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 48 33% 97%;
+    --success: 142 52% 40%;
+    --success-foreground: 48 33% 97%;
+    --border: 60 3% 20%;
+    --input: 60 3% 20%;
+    --ring: 15 63% 60%;
+
+    --severity-critical: 0 72% 58%;
+    --severity-warning: 38 92% 58%;
+    --severity-suggestion: 142 52% 50%;
+    --series: 15 62% 57%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans text-sm antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  /* Buttons, inputs, selects and badges are components under components/ui,
+     ported from project-cc-wf. Only the card surface stays as a utility. */
+  .card {
+    @apply rounded-lg border border-border bg-card;
+  }
+
+  /* A strip that is swiped rather than scrolled by its bar: the bar would be
+     a second, worse way of doing the same thing, on a row this short. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* xterm fills its panel; its own stylesheet is imported in TerminalView. */
+.terminal-host .xterm {
+  height: 100%;
+  padding: 6px 0 0 8px;
+}
+.terminal-host .xterm-viewport {
+  background-color: transparent !important;
+}
+
+/* GitLens-like blame annotations injected into Monaco (components/ui/MonacoEditor.tsx). */
+.clauder-blame-inline {
+  color: #6b6a64 !important;
+  font-style: italic;
+}
+.clauder-blame-gutter {
+  color: #7d7b72 !important;
+  font-style: normal;
+}
+
+/* Ctrl+` on the sidebar's live sessions: an orange glow that fades out. */
+@keyframes sessions-flash {
+  0%, 35% {
+    background-color: hsl(var(--primary) / 0.18);
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.7);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+.sessions-flash {
+  animation: sessions-flash 1.6s ease-out;
+}
