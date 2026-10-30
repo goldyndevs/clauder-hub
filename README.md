@@ -1,311 +1,180 @@
-# Clauder Hub
+<h1 align="center">
+  <a href="https://github.com/goldyndevs/clauder-hub"><img src="logo.svg" width="64" alt="Clauder Hub logo"></a>
+  <br>
+  Clauder Hub
+</h1>
 
-**A handy ADE (agentic development environment) for Claude Code: one local dashboard over every Claude Code session on your machine.**
+<p align="center">
+  <a href="https://www.npmjs.com/package/clauder-hub"><img src="https://img.shields.io/npm/v/clauder-hub?color=d97757" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/clauder-hub"><img src="https://img.shields.io/npm/dm/clauder-hub" alt="npm downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22-339933" alt="Node 22 or newer"></a>
+  <a href="https://github.com/goldyndevs/clauder-hub/stargazers"><img src="https://img.shields.io/github/stars/goldyndevs/clauder-hub?style=flat" alt="GitHub stars"></a>
+</p>
 
-Clauder Hub is a wrapper around Claude Code. It starts real `claude` processes
-in real terminals, shows them in your browser, and adds what a single terminal
-window cannot give you: every project's sessions in one place, an inbox of
-everything Claude is waiting on, answers from your phone, scheduled and
-webhook-triggered runs, and stats read straight from the transcripts.
+<p align="center">
+  <b>Every Claude Code session on your machine, in one browser tab.</b><br>
+  A handy ADE and wrapper around Claude Code.
+</p>
 
-Nothing is reimplemented and nothing is installed into Claude Code. The
-terminal you see *is* the `claude` CLI you already use, with your login, your
-settings and your plugins.
+<p align="center">
+  <img src="docs/assets/hero.jpg" width="960" alt="Clauder Hub: a Claude Code session in its terminal, waiting on a permission, with the project's sessions in the sidebar">
+</p>
 
----
-
-## Why
-
-Claude Code is great in one terminal. It gets messy with five:
-
-- 😵 **Too many windows.** Sessions in several repos, each in its own tab, and
-  no way to see at a glance which ones are working, done, or stuck.
-- ⏳ **Silent waits.** A session asks for permission or asks a question, and
-  sits there for an hour because you were in another window (or away from
-  your desk).
-- 🔁 **Repeated chores.** Nightly test runs, dependency checks, triage on an
-  incoming webhook: you either babysit them or script around the CLI yourself.
-- 🧰 **Context bloat.** Every agent, skill, MCP server and plugin you ever
-  installed loads into every session, even when the task needs three of them.
-- 📊 **No overview.** Where did the tokens go? Which tools, subagents and MCP
-  servers did a session actually use?
-
-Clauder Hub keeps all of that in one browser tab, and lets you answer from
-Slack or Telegram when you are not at the machine.
+<p align="center">
+  <code>npx clauder-hub .</code>
+</p>
 
 ---
 
-## Feature tour
+## Features
 
-### 🖥️ Sessions and terminals
+Clauder Hub runs the real `claude` you already use, in real terminals, and adds what one terminal window cannot: every project at once, an inbox of everything Claude is waiting on, answers from your phone, scheduled runs and stats. Nothing is reimplemented and nothing is installed into Claude Code.
 
-- Every session of a project, read from `~/.claude/projects/...`, including the
-  ones you started in a plain terminal.
-- **New session** opens a plain `claude` straight in an embedded terminal
-  (xterm.js over a pty on the hub). Resume any past session the same way.
-- Closing the browser only detaches: the process keeps running in the hub.
-  Pop a session out into a window of its own (`#/w/...`) if you like.
-- Sessions started outside the hub are visible but have no hooks; resume one
-  in the hub to bring it in.
+<table>
+  <tr>
+    <td width="40%">
+      <h3>Real terminals, live activity</h3>
+      <b>New session</b> opens a plain <code>claude</code> in an embedded xterm. Close the tab and it keeps running; every tool call, token and subagent is read from the transcripts as it goes.
+    </td>
+    <td width="60%">
+      <picture>
+        <source srcset="docs/assets/terminal.webp" type="image/webp">
+        <img src="docs/assets/terminal.jpg" width="100%" alt="Starting a session and typing a prompt; Claude reads, edits and asks to run npm test">
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>One inbox for every project</h3>
+      Permissions, questions and finished turns from all your projects land in one place, with buttons. The answer is typed into the terminal, and the first answer from anywhere wins.
+    </td>
+    <td>
+      <picture>
+        <source srcset="docs/assets/inbox.webp" type="image/webp">
+        <img src="docs/assets/inbox.jpg" width="100%" alt="The global inbox: allowing npm test and picking Redis, then each session comes back with its next question">
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Answer from your phone</h3>
+      Telegram and Slack bots relay every question with inline buttons, and BotFather-style commands (<code>/new</code>, <code>/sessions</code>, <code>/summary</code>, <code>/stop</code>) drive sessions from chat. No public URL needed.
+    </td>
+    <td>
+      <picture>
+        <source srcset="docs/assets/telegram.webp" type="image/webp">
+        <img src="docs/assets/telegram.jpg" width="100%" alt="A Telegram chat with the hub's bot: a permission card with Allow and Deny buttons, then the /sessions picker">
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Cron, webhooks and a queue</h3>
+      Nightly test triage, weekly dependency audits, a run per new GitHub issue. Each project has one queue, and a task category defines what "done" means before a run may close.
+    </td>
+    <td>
+      <img src="docs/assets/automation.jpg" width="100%" alt="The Automation page: cron and webhook jobs and the queue of finished runs">
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Toolsets and presets</h3>
+      Turn agents, skills, MCP servers and plugins off for one session, or save the choice as a preset for jobs and new sessions. Applied through that session's own <code>--settings</code>, nothing else.
+    </td>
+    <td>
+      <img src="docs/assets/toolsets.jpg" width="100%" alt="Toolset presets: switches for plugins and agents in a Frontend preset">
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Stats from the transcripts</h3>
+      Tokens by day and by model, built-in tools, MCP servers, skills and subagents, per project and per session. Parsed from the JSONL Claude Code already writes, so it costs nothing.
+    </td>
+    <td>
+      <img src="docs/assets/stats.jpg" width="100%" alt="The project overview: token totals, output tokens per day, tokens by model, tool and MCP usage">
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Files and editor</h3>
+      A file tree and a Monaco editor with tabs sit beside your sessions, with GitLens-style blame from <code>git blame</code>, so you can check what Claude changed without leaving the page.
+    </td>
+    <td>
+      <img src="docs/assets/files.jpg" width="100%" alt="The Files tab and the editor showing src/lib/cart.ts with its last change">
+    </td>
+  </tr>
+</table>
 
-### 🌐 The global page: many projects, one view
+**Also in the box:**
 
-- One hub runs per machine and remembers every project you gave it.
-- The global page (`#/global`) shows a card per project, **one inbox across all
-  of them**, and the global channels.
-- Each project keeps its own database, queue, cron jobs, channels, presets and
-  categories, and they all keep running while you look at another project.
-
-### 📥 Inbox: everything Claude is waiting on
-
-- Permission requests, `AskUserQuestion` questions, ends of turns, MCP
-  suggestions and finished tasks land in the inbox as cards with buttons.
-- Answer from the dashboard or from any channel. **The first answer from
-  anywhere wins**, and the others are told who answered.
-- An answer is delivered by *typing into the pty*, exactly as you would.
-  Hooks never approve, deny or delay anything on their own.
-
-### 💬 Channels: Telegram, Slack and webhooks
-
-| Channel | How it connects | Two-way |
-| --- | --- | --- |
-| Telegram | Bot API, long polling (no public URL needed) | Yes, inline buttons and replies |
-| Slack | Socket Mode (no public URL needed) | Yes, blocks, buttons and threads |
-| Webhook | JSON, plain text, Discord or Teams (Adaptive Card) | JSON carries a `replyUrl`; chat formats are one-way |
-
-**BotFather-style commands** (on Slack use `!` instead of `/`, since Slack keeps `/` for itself):
-
-| Command | What it does |
-| --- | --- |
-| `/new <prompt>` | Start a session (alone, it asks for the prompt) |
-| `/run <prompt>` | Queue an unattended run |
-| `/sessions` | Pick a session; your plain messages then go to it |
-| `/summary` | What a session did, read from its transcript (no tokens spent) |
-| `/stop` | Stop a running session (asks first) |
-| `/queue` | The run queue, with cancel buttons |
-| `/cancel`, `/help` | Drop a pending question, or show the menu |
-
-A **global bot** also has `/projects`, `/use <name>` and `/addproject`, and
-relays every project's questions labelled with the project name.
-
-**Natural-language fallbacks.** Misspell a command, describe a session instead
-of naming it ("the one fixing the login bug"), or describe a folder for
-`/addproject` ("my calendar app"), and the hub asks a small Claude model
-(Haiku, no tools) for its best guesses. They come back as buttons; **nothing
-runs until you press one**. Plain chat on Slack is never guessed at, since
-people talk there.
-
-### ⏰ Automation: cron, webhooks and a queue per project
-
-- **Cron jobs** and **webhook triggers** start unattended sessions.
-- A webhook is `POST /api/trigger/<job id>` with the job's token in the
-  `x-clauder-token` header. `{{payload.field}}` in the job's prompt pulls a
-  value from the request body (`{{payload}}` is the whole body, `{{now}}` the time).
-- Every run goes through **one queue per project**: runs in a project go one at
-  a time, different projects run side by side.
-- **Task categories** define what "done" means for a kind of task (a PR, an RCA,
-  test evidence...). A session with a category is closed only when Claude
-  reports every required deliverable; if something is missing, the hub types
-  back what is missing.
-
-### 🧰 Toolsets and presets
-
-- Turn agents, skills, MCP servers and plugins **off** for one session (its
-  Toolset tab), or save the choice as a **preset** for jobs and as the default
-  for new sessions.
-- Applied only through that session's own `--settings` file. Changing a live
-  session restarts it on the same conversation.
-
-### 📊 Stats from the transcripts
-
-- Tokens (input, output, cache) by model and by day.
-- Tool calls grouped as built-in, MCP (by server), skills and subagents, plus
-  each subagent's own tokens and calls.
-- All parsed from the JSONL transcripts Claude Code already writes. Nothing
-  extra is collected.
-
-### 📁 Files and editor
-
-- A file tree in the sidebar (create, rename, move, delete) and a **Monaco**
-  editor with tabs.
-- GitLens-style **blame** annotations from `git blame` (read-only, git is only
-  asked, never told).
-
-### 📝 Prompts, memory and inventory
-
-- Every word the hub adds to a session or sends to a channel is a prompt you
-  can edit and restore (Hub prompts).
-- `CLAUDE.md` files, rules, auto memory, agents, skills and commands can be
-  edited in place after reviewing a diff.
-- Inventory of agents, skills, commands, MCP servers, hooks and plugins by
-  scope (user, project, local, plugin).
-- **MCP suggestions:** when a session is blocked on a missing integration it
-  says so and stops. The `claude mcp add --scope project ...` command runs only
-  when you approve it, then the session resumes so the server loads.
-
-### 🤖 No forms: configuration is a conversation
-
-Creating a cron job, a run, a category, a preset or a channel opens a Claude
-session with that purpose. Claude asks what it needs, shows the final JSON,
-and saves it through the hub API after you say yes.
+- **The global page.** A card per project with what is running, waiting and queued, plus one global bot that tags each message with its project (`/projects`, `/use`, `/addproject`).
+- **No forms.** Creating a job, a run, a category, a preset or a channel opens a Claude session for it: Claude asks, shows the JSON and saves it after your yes.
+- **Natural-language fallbacks.** Misspell a command or describe a session ("the one fixing the login bug") and a small Haiku call offers its guesses as buttons. Nothing runs until you press one.
+- **Prompts, memory and inventory.** Edit every word the hub adds to a session, edit `CLAUDE.md`, rules, agents and skills after a diff, and see every agent, skill, command, MCP server, hook and plugin by scope.
+- **MCP suggestions.** A session blocked on a missing integration says so; `claude mcp add --scope project` runs only when you approve it.
+- **Desktop notifications** on Windows, macOS and Linux, and webhooks to Discord, Teams or your own endpoint.
+- **Local only.** The server listens on `127.0.0.1`. Hooks are answered `{}` at once, so the hub can never approve or block a tool call by itself.
 
 ---
 
-## Use cases
+## Install
 
-**Approve a permission from your phone.** You step away while Claude refactors
-a module. It hits a `Bash` permission prompt; the request arrives in Telegram
-with buttons. Tap *Allow*, and the hub types the answer into the terminal.
-
-**Reply late, safely.** You reply to a question an hour later by replying to
-its Telegram message. If it was already answered, or the session has moved
-on, the hub tells you so (and points at the newer question) instead of
-applying your old "yes" to whatever dialog is showing now.
-
-**Nightly jobs with a summary.** A cron job runs `npm test` and triages
-failures every night at 2:00. Each run waits its turn in the project's queue,
-and its end of turn (or its done report, if the job has a category) lands in
-the inbox and your channels. In the morning, `/summary` shows what it did.
-
-**Juggle five projects from one page.** Add each repo once. The global page
-shows every project, a single inbox, and one global bot that tags each
-message with its project. `/use api-server` then `/new fix the flaky test`
-starts work there from chat.
-
-**Add a project by describing it.** Tell the global bot `/addproject my
-calendar app`. It looks through your usual code folders and offers matching
-folders as buttons; press one and the project is in the hub.
-
-**Trigger Claude from another system.** Point a GitHub, n8n or monitoring
-webhook at `POST /api/trigger/<job id>`; the job's prompt picks fields out of
-the payload with `{{payload.issue.title}}` and queues a run.
-
-**Lean sessions for focused work.** Make a "frontend" preset that turns off the
-database MCP servers and backend agents, and use it for UI jobs and new
-sessions.
-
----
-
-## Quick start
-
-**Requirements**
-
-- Node.js 22 or newer
-- [Claude Code](https://docs.claude.com/en/docs/claude-code) installed and
-  logged in (`claude` on your PATH)
-
-**Install and run**
+**Requirements:** Node.js 22 or newer, and [Claude Code](https://docs.claude.com/en/docs/claude-code) installed and signed in (`claude` on your PATH).
 
 ```bash
-npx clauder-hub "/path/to/your/project"
-# or keep it installed:
+npx clauder-hub .              # the current folder
+npx clauder-hub ~/code/my-app  # or any project folder
+```
+
+Or keep it installed:
+
+```bash
 npm i -g clauder-hub
-clauder-hub "/path/to/your/project"     # 'clauder-hub .' for the current folder
+clauder-hub .
 ```
 
-Open **http://localhost:4329**. The port moves up if it is taken (`--port <n>`
-to pick one); the hub prints the one it chose. It remembers its projects, so
-later runs can be just `clauder-hub`, and running it again with another path
-while the hub is up adds that folder to the running hub. `clauder-hub --help`
-lists the options.
+Open **http://localhost:4329**. If the port is taken the next free one is used (`--port <n>` picks one). The hub remembers its projects, so later runs can be just `clauder-hub`; running it again with another folder adds that folder to the hub already running. `clauder-hub --help` lists the options.
+
+Data lives in `~/.clauder-hub` (`CLAUDER_HUB_HOME` moves it): the project list, one database per project, and per-terminal settings files.
 
 ---
 
-## How it works
+## Developing
 
-```
-             Browser (React + xterm.js)          Telegram / Slack / webhooks
-                      |   ^                                |   ^
-           REST + WebSocket |                     answers  |   | questions
-                      v   |                                v   |
-  +-----------------------------------------------------------------------+
-  |  Clauder Hub server (Express + ws, 127.0.0.1, one per machine)        |
-  |                                                                       |
-  |  inbox / channels / queue + cron / stats / files / prompts            |
-  +-----------------------------------------------------------------------+
-        |  spawns in a pty, types answers         ^  HTTP hooks (answered {} at once)
-        v                                         |
-  +--------------------------+     writes     +--------------------------+
-  |  real `claude` process   | -------------> |  ~/.claude/projects/...  |
-  |  --settings (hooks)      |                |  JSONL transcripts       |
-  |  --append-system-prompt  |                +--------------------------+
-  +--------------------------+                        | read for stats
+```bash
+git clone https://github.com/goldyndevs/clauder-hub.git
+cd clauder-hub
+npm install
+npm run dev -- /path/to/a/project   # server and web with reload
 ```
 
-| Need | How |
-| --- | --- |
-| Show the terminal | `claude` runs in a pty on the hub; the page attaches over a WebSocket |
-| Know a session is waiting | HTTP hooks passed per process with `--settings` (SessionStart, UserPromptSubmit, PermissionRequest, PreToolUse for AskUserQuestion, Notification, Stop, SessionEnd). The hub answers each with `{}` immediately, so hooks never decide or delay anything |
-| Answer from anywhere | The answer is typed into the pty, as a person would |
-| Done reports, MCP suggestions | `--append-system-prompt-file`, read back from the last message by the Stop hook |
-| Toolsets | Settings keys merged into the session's own `--settings` file |
-| Stats | The JSONL transcripts Claude Code writes anyway |
-
-**Data layout** (`CLAUDER_HUB_HOME` moves it):
-
-```
-~/.clauder-hub/
-  hub.db            project list and hub prompts
-  hub.lock          one hub per machine; a second start hands its folder over
-  global/           the global context (global channels, hub tasks)
-  projects/<id>/    hub.db per project: sessions, inbox, jobs, channels, presets
-  run/              per-terminal --settings files and appended system prompts
-```
-
----
-
-## Safety and privacy
-
-- 🔒 **Local only.** The server listens on `127.0.0.1`, never on your network.
-  It runs a shell-capable agent, so keep it that way.
-- 🧼 **Nothing installed into Claude Code.** No MCP server, skill, plugin or
-  settings file is written. Hooks and the extra prompt are passed per process
-  on the command line. The only exceptions are ones you ask for by name:
-  running a suggested `claude mcp add --scope project`, or saving an
-  instruction file after reviewing its diff.
-- 🙅 **Hooks never decide.** Every hook is answered `{}` before the hub does
-  anything with it, so the hub cannot approve or block a tool call by itself.
-- ✋ **Confirm before acting.** Stopping, deleting, running commands and
-  starting unattended runs ask first in the dashboard. Channel guesses are
-  buttons that do nothing until pressed.
-- 📡 **What leaves the machine:** only what you configure. Channel messages go
-  to the Slack, Telegram or webhook you set up, and natural-language guesses
-  use your own Claude Code login (a small Haiku call).
+`npm run typecheck` and `npm run build` before a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) and [CLAUDE.md](CLAUDE.md) for how the code is laid out and the rules it keeps.
 
 ---
 
 ## FAQ
 
 **Does it replace Claude Code?**
-No. It runs the `claude` you already have, in a real terminal. Everything you
-can do in Claude Code you still do in that terminal.
+No. It runs the `claude` you already have, with your login, settings and plugins, in a real terminal.
 
-**Do I need a server or a public URL for Telegram or Slack?**
-No. Telegram uses long polling and Slack uses Socket Mode, both outgoing
-connections from your machine.
+**Does it write anything into my Claude Code setup?**
+No. Hooks and the extra system prompt are passed per process with `--settings` and `--append-system-prompt-file`. The only exceptions are ones you ask for by name: a suggested `claude mcp add --scope project`, or saving an instruction file after its diff.
 
-**What happens to sessions when I close the browser?**
-They keep running in the hub. Reopen the page and attach again.
+**Do I need a public URL for Telegram or Slack?**
+No. Telegram uses long polling and Slack uses Socket Mode, both outgoing connections.
+
+**What happens when I close the browser?**
+Sessions keep running in the hub. Reopen the page and attach again.
 
 **Can it see sessions I started in a normal terminal?**
-Yes, they are listed with their stats. To answer them from the inbox or a
-channel, resume them in the hub so they get its hooks.
+Yes, with their stats. Resume one in the hub to answer it from the inbox or a channel.
 
 **Does it cost extra tokens?**
-Stats and `/summary` are read from transcripts and cost nothing. Only the
-natural-language fallbacks in channels make a small Haiku call.
-
-**Can two hubs run at once?**
-One hub runs per machine. Starting another hands its project folder to the
-running one.
-
-**Where is my data?**
-In `~/.clauder-hub` (or `CLAUDER_HUB_HOME`), plus the transcripts Claude Code
-keeps in `~/.claude`.
+Stats and `/summary` are read from transcripts. Only the natural-language fallbacks in channels make a small Haiku call.
 
 ---
 
 ## License
 
-Free to use, not open source: see [LICENSE](LICENSE). © 2026 goldyndevs.
-Questions and ideas: goldyndevs@gmail.com
+[MIT](LICENSE) © goldyndevs
