@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { findClaudeCode } from "./claudeCode.js";
+import { claudeStatus, findClaudeCode } from "./claudeCode.js";
 import { hubHome } from "./paths.js";
 
 /**
@@ -13,7 +13,7 @@ import { hubHome } from "./paths.js";
  */
 export function askSmallModel(prompt: string, timeoutMs = 45_000): Promise<string | null> {
   const claude = findClaudeCode();
-  if (!claude) return Promise.resolve(null);
+  if (!claude || claudeStatus()?.problem) return Promise.resolve(null);
   return new Promise((resolve) => {
     const cwd = path.join(hubHome, "global");
     fs.mkdirSync(cwd, { recursive: true });

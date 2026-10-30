@@ -1,0 +1,286 @@
+---
+import "../styles/global.css";
+import Logo from "../components/Logo.astro";
+import Icon from "../components/Icon.astro";
+import HeroDemo from "../components/HeroDemo.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const repo = "https://github.com/goldyndevs/clauder-hub";
+const title = "Clauder Hub";
+const description = "A handy ADE for Claude Code: one local dashboard over every project's real claude sessions, one inbox of everything Claude waits on, answered from your phone.";
+const install = [
+  "git clone https://github.com/goldyndevs/clauder-hub.git",
+  "cd clauder-hub && npm install",
+  'npm run dev -- "/path/to/your/project"',
+];
+const commands = ["/new", "/run", "/sessions", "/summary", "/stop", "/queue"];
+const toolset = [
+  { name: "frontend-agent", on: true },
+  { name: "mcp: database", on: false },
+  { name: "skill: release-notes", on: false },
+  { name: "plugin: playwright", on: true },
+];
+const promises = ["Real claude, real pty", "Nothing installed into Claude Code", "Hooks never decide", "Local only, 127.0.0.1"];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content="Clauder Hub" />
+    <meta property="og:description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet" />
+    <script is:inline>
+      // Theme before first paint: a saved choice, else the system's. The app itself is dark.
+      (function () {
+        var saved = null;
+        try { saved = localStorage.getItem("theme"); } catch (e) {}
+        var dark = saved ? saved === "dark" : !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.classList.add("js");
+      })();
+    </script>
+  </head>
+  <body class="overflow-x-hidden">
+    <!-- Soft brand glow behind the hero -->
+    <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[640px] bg-[radial-gradient(60%_50%_at_70%_20%,hsl(var(--primary)/0.16),transparent_70%)]"></div>
+
+    <header class="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+        <a href={`${base}/`} class="flex items-center gap-2 hover:opacity-80">
+          <Logo size={22} />
+          <span class="text-sm font-semibold">Clauder Hub</span>
+        </a>
+        <nav class="ml-6 hidden gap-5 text-sm text-muted-foreground md:flex">
+          <a href="#features" class="hover:text-foreground">Features</a>
+          <a href="#how" class="hover:text-foreground">How it works</a>
+          <a href="#start" class="hover:text-foreground">Quick start</a>
+        </nav>
+        <div class="ml-auto flex items-center gap-1.5">
+          <button id="theme" type="button" class="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Toggle light and dark">
+            <Icon name="sun" class="hidden h-4 w-4 dark:block" />
+            <Icon name="moon" class="h-4 w-4 dark:hidden" />
+          </button>
+          <a href={repo} class="btn btn-foreground px-3 py-1.5 text-xs"><Icon name="github" class="h-3.5 w-3.5" />GitHub</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Hero -->
+      <section id="start" class="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-12 sm:px-6 sm:pt-20 lg:grid-cols-[1fr_1.05fr] lg:gap-10">
+        <div data-reveal class="min-w-0">
+          <span class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
+            <span class="h-1.5 w-1.5 animate-status-pulse rounded-full bg-primary"></span>
+            An ADE for Claude Code
+          </span>
+          <h1 class="mt-5 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.4rem]">
+            Every Claude Code session.<br />
+            <span class="font-serif font-medium italic text-primary">One tab.</span>
+          </h1>
+          <p class="mt-5 max-w-md text-base leading-relaxed text-muted-foreground">
+            A local dashboard over the real <code class="font-mono text-foreground">claude</code> in every project.
+            One inbox for everything it waits on. Answer from your desk or your phone.
+          </p>
+
+          <div class="mt-7 max-w-lg overflow-hidden rounded-lg border border-border bg-term shadow-lg">
+            <div class="flex items-center gap-2 border-b border-white/10 px-3 py-1.5 text-[11px] text-term-foreground/60">
+              <Icon name="terminal" class="h-3.5 w-3.5" />Quick start
+              <button id="copy" type="button" class="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-term-foreground/70 transition-colors hover:bg-white/10 hover:text-term-foreground" aria-label="Copy commands">
+                <Icon name="copy" class="copy-icon h-3.5 w-3.5" /><Icon name="check" class="check-icon hidden h-3.5 w-3.5" /><span class="copy-label">Copy</span>
+              </button>
+            </div>
+            <pre id="install" class="overflow-x-auto px-3 py-3 font-mono text-[12px] leading-relaxed text-term-foreground sm:text-[13px]">{install.map((line) => <span class="block"><span class="select-none text-primary">$ </span>{line}</span>)}</pre>
+          </div>
+          <p class="mt-2 text-xs text-muted-foreground">Node.js 22+ and Claude Code logged in. Then open <span class="font-mono">localhost:4328</span>.</p>
+
+          <div class="mt-6 flex flex-wrap gap-2">
+            <a href={repo} class="btn btn-primary px-5 py-2.5 text-base"><Icon name="github" class="h-4 w-4" />Star on GitHub</a>
+            <a href="#features" class="btn btn-muted px-5 py-2.5 text-base">See what it does</a>
+          </div>
+        </div>
+
+        <div data-reveal class="min-w-0">
+          <HeroDemo />
+        </div>
+      </section>
+
+      <!-- Promises -->
+      <section class="border-y border-border bg-card/50">
+        <ul class="mx-auto flex max-w-6xl flex-wrap justify-center gap-x-6 gap-y-2 px-4 py-4 text-xs text-muted-foreground sm:px-6 sm:text-sm">
+          {promises.map((item) => (
+            <li class="flex items-center gap-2"><Icon name="check" class="h-3.5 w-3.5 text-primary" />{item}</li>
+          ))}
+        </ul>
+      </section>
+
+      <!-- Features (bento) -->
+      <section id="features" class="mx-auto max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6">
+        <h2 data-reveal class="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
+          Five terminals is a mess. <span class="font-serif font-medium italic text-primary">This is not.</span>
+        </h2>
+
+        <div class="mt-10 grid gap-4 lg:grid-cols-3">
+          <article data-reveal class="card tile p-6 lg:col-span-2">
+            <div class="flex items-center gap-2 text-primary"><Icon name="inbox" class="h-5 w-5" /><h3 class="text-lg font-semibold text-foreground">One inbox</h3></div>
+            <p class="mt-2 max-w-md text-sm text-muted-foreground">Permissions, questions and finished turns from every project, as cards with buttons. The first answer from anywhere wins.</p>
+            <div class="mt-5 grid gap-2 sm:grid-cols-3">
+              <div class="rounded-md border border-border bg-background p-3 text-xs">
+                <span class="badge bg-warning text-background">Permission</span>
+                <p class="mt-2 font-medium">api-server</p>
+                <p class="truncate font-mono text-muted-foreground">Bash: npm run migrate</p>
+              </div>
+              <div class="rounded-md border border-border bg-background p-3 text-xs">
+                <span class="badge bg-foreground text-background">Question</span>
+                <p class="mt-2 font-medium">web-app</p>
+                <p class="truncate text-muted-foreground">Tabs or a sidebar?</p>
+              </div>
+              <div class="rounded-md border border-border bg-background p-3 text-xs">
+                <span class="badge bg-success text-success-foreground">Done</span>
+                <p class="mt-2 font-medium">docs</p>
+                <p class="truncate text-muted-foreground">Nightly link check</p>
+              </div>
+            </div>
+          </article>
+
+          <article data-reveal class="card tile p-6">
+            <div class="flex items-center gap-2 text-primary"><Icon name="message" class="h-5 w-5" /><h3 class="text-lg font-semibold text-foreground">Reply from your phone</h3></div>
+            <p class="mt-2 text-sm text-muted-foreground">Telegram or Slack, no public URL. BotFather-style commands.</p>
+            <div class="mt-5 flex flex-wrap gap-1.5">
+              {commands.map((command) => <span class="rounded bg-muted px-2 py-1 font-mono text-xs">{command}</span>)}
+            </div>
+          </article>
+
+          <article data-reveal class="card tile p-6">
+            <div class="flex items-center gap-2 text-primary"><Icon name="clock" class="h-5 w-5" /><h3 class="text-lg font-semibold text-foreground">Runs while you sleep</h3></div>
+            <p class="mt-2 text-sm text-muted-foreground">Cron jobs and webhook triggers per project. One queue each, projects side by side.</p>
+            <div class="mt-5 space-y-1.5 font-mono text-xs">
+              <p class="truncate rounded bg-muted px-2 py-1"><span class="text-primary">cron</span> 0 2 * * *</p>
+              <p class="truncate rounded bg-muted px-2 py-1"><span class="text-primary">POST</span> /api/trigger/&lt;job id&gt;</p>
+            </div>
+          </article>
+
+          <article data-reveal class="card tile p-6 lg:col-span-2">
+            <div class="flex items-center gap-2 text-primary"><Icon name="sliders" class="h-5 w-5" /><h3 class="text-lg font-semibold text-foreground">Lean toolsets</h3></div>
+            <p class="mt-2 max-w-md text-sm text-muted-foreground">Switch agents, skills, MCP servers and plugins off for one session, or save the mix as a preset.</p>
+            <div class="mt-5 grid gap-2 sm:grid-cols-2">
+              {toolset.map((item) => (
+                <div class="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-xs">
+                  <span class={`truncate font-mono ${item.on ? "" : "text-muted-foreground line-through"}`}>{item.name}</span>
+                  <span class={`relative h-4 w-7 shrink-0 rounded-full ${item.on ? "bg-primary" : "bg-muted"}`}>
+                    <span class={`absolute top-0.5 h-3 w-3 rounded-full bg-card shadow-sm ${item.on ? "left-3.5" : "left-0.5"}`}></span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section id="how" class="scroll-mt-20 border-t border-border bg-card/50">
+        <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+          <h2 data-reveal class="text-3xl font-semibold tracking-tight sm:text-4xl">
+            A wrapper, <span class="font-serif font-medium italic text-primary">not a rewrite.</span>
+          </h2>
+          <ol class="relative mt-10 grid gap-4 md:grid-cols-3">
+            <li data-reveal class="card p-5">
+              <span class="grid h-8 w-8 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">1</span>
+              <h3 class="mt-4 font-semibold">Point it at a folder</h3>
+              <p class="mt-1 text-sm text-muted-foreground">Add each repo once. The hub remembers it.</p>
+            </li>
+            <li data-reveal class="card p-5">
+              <span class="grid h-8 w-8 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">2</span>
+              <h3 class="mt-4 font-semibold">It runs the real <span class="font-mono">claude</span></h3>
+              <p class="mt-1 text-sm text-muted-foreground">In a pty, with your login and plugins. Hooks ride along per process.</p>
+            </li>
+            <li data-reveal class="card p-5">
+              <span class="grid h-8 w-8 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">3</span>
+              <h3 class="mt-4 font-semibold">You answer anywhere</h3>
+              <p class="mt-1 text-sm text-muted-foreground">The hub types your answer into the terminal, as you would.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Closing call -->
+      <section class="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
+        <div data-reveal>
+          <Logo size={56} class="mx-auto" />
+          <h2 class="mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">Stop babysitting tabs.</h2>
+          <div class="mt-6 flex flex-wrap justify-center gap-2">
+            <a href={repo} class="btn btn-primary px-5 py-2.5 text-base"><Icon name="github" class="h-4 w-4" />Get it on GitHub</a>
+            <a href="#start" class="btn btn-muted px-5 py-2.5 text-base">Quick start</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border">
+      <div class="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 py-6 text-xs text-muted-foreground sm:flex-row sm:px-6">
+        <span class="flex items-center gap-2"><Logo size={16} />Clauder Hub</span>
+        <span class="sm:ml-auto">MIT License, 2026 goldyndevs</span>
+        <a href={repo} class="flex items-center gap-1.5 hover:text-foreground"><Icon name="github" class="h-3.5 w-3.5" />GitHub</a>
+        <a href={`${repo}/issues`} class="hover:text-foreground">Issues</a>
+      </div>
+    </footer>
+
+    <script>
+      const root = document.documentElement;
+      document.getElementById("theme")?.addEventListener("click", () => {
+        const dark = root.classList.toggle("dark");
+        try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch {}
+      });
+
+      const copy = document.getElementById("copy");
+      copy?.addEventListener("click", async () => {
+        const text = [...document.querySelectorAll("#install > span")].map((line) => line.textContent?.replace(/^\$ /, "") ?? "").join("\n");
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          return;
+        }
+        copy.querySelector(".copy-icon")?.classList.add("hidden");
+        copy.querySelector(".check-icon")?.classList.remove("hidden");
+        const label = copy.querySelector(".copy-label");
+        if (label) label.textContent = "Copied";
+        setTimeout(() => {
+          copy.querySelector(".copy-icon")?.classList.remove("hidden");
+          copy.querySelector(".check-icon")?.classList.add("hidden");
+          if (label) label.textContent = "Copy";
+        }, 1600);
+      });
+
+      const items = document.querySelectorAll("[data-reveal]");
+      if ("IntersectionObserver" in window) {
+        const observer = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-in");
+              observer.unobserve(entry.target);
+            }
+          }
+        }, { rootMargin: "0px 0px -8% 0px" });
+        items.forEach((item) => observer.observe(item));
+      } else {
+        items.forEach((item) => item.classList.add("is-in"));
+      }
+    </script>
+  </body>
+</html>
+
+<style>
+  .tile {
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .tile:hover {
+    transform: translateY(-2px);
+    border-color: hsl(var(--primary) / 0.5);
+    box-shadow: 0 10px 30px -12px hsl(var(--primary) / 0.35);
+  }
+</style>

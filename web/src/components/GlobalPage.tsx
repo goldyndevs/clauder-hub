@@ -17,6 +17,7 @@ import { SessionView } from "./SessionView";
 import { StatusDot } from "./Sidebar";
 import { Button } from "./ui/Button";
 import { Empty } from "./ui/Empty";
+import { ClaudeBanner } from "./ClaudeBanner";
 import { Tooltip } from "./ui/Tooltip";
 
 /** #/global's pages: they reuse the project page names, so the route reads #/global/inbox. */
@@ -44,7 +45,7 @@ function ProjectCard({ project }: { project: GlobalProject }) {
       },
     });
   return (
-    <div className="card flex flex-col gap-2 p-3">
+    <div className="card flex min-w-0 flex-col gap-2 p-3">
       <div className="flex items-start gap-2">
         <button onClick={() => openProject(project.id)} className="min-w-0 flex-1 text-left" title={project.root}>
           <div className="truncate text-sm font-semibold hover:underline">{project.name}</div>
@@ -71,8 +72,8 @@ function ProjectCard({ project }: { project: GlobalProject }) {
         </span>
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-        <span className="flex min-w-0 items-center gap-1 truncate" title={project.nextCron ? `${project.nextCron.name}: ${when(project.nextCron.at)}` : undefined}>
-          <CalendarClock size={11} /> {project.nextCron ? `${project.nextCron.name} · ${when(project.nextCron.at)}` : "no cron job"}
+        <span className="flex min-w-0 max-w-full items-center gap-1 truncate" title={project.nextCron ? `${project.nextCron.name}: ${when(project.nextCron.at)}` : undefined}>
+          <CalendarClock size={11} className="shrink-0" /> <span className="truncate">{project.nextCron ? `${project.nextCron.name} · ${when(project.nextCron.at)}` : "no cron job"}</span>
         </span>
         <span title="Sent and written in the sessions active today, cache reads left out">
           {project.activeToday} active today · {compact(project.tokensToday)} tokens
@@ -108,7 +109,7 @@ function GlobalProjects() {
       />
       <OpenFolderDialog open={picking} onOpenChange={setPicking} />
       {overview.data?.length ? (
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {overview.data.map((project) => (
             <ProjectCard key={project.id} project={project} />
           ))}
@@ -340,6 +341,7 @@ export function GlobalShell() {
             </div>
           </div>
         )}
+        <ClaudeBanner />
         <div className="min-h-0 flex-1">{content}</div>
       </main>
     </div>

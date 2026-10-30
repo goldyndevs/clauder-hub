@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { nanoid } from "nanoid";
 import { describeCategories } from "./categories.js";
-import { findClaudeCode } from "./claudeCode.js";
+import { requireClaudeCode } from "./claudeCode.js";
 import { claudeSettings, mcpSuggestionsEnabled, PERMISSION_MODES, settingFlags } from "./claudeSettings.js";
 import { db, now, parseJson } from "./db.js";
 import { broadcast } from "./events.js";
@@ -147,12 +147,6 @@ export function setSessionSetup(sessionId: string, setup: SessionSetup): void {
   broadcast("sessions", { sessionId });
 }
 
-export class ClaudeMissing extends Error {
-  constructor() {
-    super("Claude Code was not found. Install it ('npm i -g @anthropic-ai/claude-code'), sign in once with 'claude', then restart the hub.");
-  }
-}
-
 export interface StartOptions {
   prompt?: string;
   /** Resume this session instead of starting a new one. */
@@ -173,8 +167,7 @@ export interface StartOptions {
 }
 
 export function startSession(options: StartOptions): Terminal {
-  const claude = findClaudeCode();
-  if (!claude) throw new ClaudeMissing();
+  const claude = requireClaudeCode();
   if (options.resumeId) {
     const running = terminalForSession(options.resumeId);
     if (running) return running;

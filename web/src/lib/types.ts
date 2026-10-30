@@ -244,7 +244,20 @@ export interface Health {
   projectRoot: string;
   project: string;
   claude: string | null;
+  claudeStatus: ClaudeStatus | null;
   transcriptsDir: string;
+}
+
+/** Whether Claude Code can run here: installed, starts, signed in. Null fields are unknown. */
+export interface ClaudeStatus {
+  path: string | null;
+  version: string | null;
+  loggedIn: boolean | null;
+  account: string | null;
+  problem: "missing" | "broken" | "signedOut" | null;
+  message: string | null;
+  fix: string | null;
+  checkedAt: number;
 }
 
 /** A project the hub manages, with what it is doing now. */

@@ -197,12 +197,26 @@ export function LogoLink({ className }: { className?: string }) {
 }
 
 /** "Clauder Hub" in a header, leading to #/global like the logo beside it. */
+/** The hub's version, asked once for the whole page. */
+let hubVersion: Promise<string | null> | null = null;
+
 export function TitleLink() {
   const openProject = useStore((state) => state.openProject);
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    hubVersion ??= api
+      .hub()
+      .then((hub) => hub.version ?? null)
+      .catch(() => null);
+    void hubVersion.then(setVersion);
+  }, []);
   return (
-    <button onClick={() => openProject(GLOBAL_ID)} title="Global: every project" className="block text-left text-sm font-semibold leading-tight hover:underline">
-      Clauder Hub
-    </button>
+    <span className="flex items-baseline gap-1.5">
+      <button onClick={() => openProject(GLOBAL_ID)} title="Global: every project" className="text-left text-sm font-semibold leading-tight hover:underline">
+        Clauder Hub
+      </button>
+      {version && <span className="text-[10px] font-normal leading-tight text-muted-foreground/70">v{version}</span>}
+    </span>
   );
 }
 

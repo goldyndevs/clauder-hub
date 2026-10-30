@@ -21,6 +21,7 @@ import { FileTabs } from "./components/FileTabs";
 import { TerminalTabs } from "./components/TerminalTabs";
 import { FOCUS_SESSIONS_EVENT, MobileBar, Sidebar } from "./components/Sidebar";
 import { cn } from "./lib/cn";
+import { ClaudeBanner } from "./components/ClaudeBanner";
 import { useStore, type Page } from "./lib/store";
 import { useMediaQuery } from "./lib/useMediaQuery";
 import { usePersistentWidth } from "./lib/usePersistentWidth";
@@ -162,9 +163,7 @@ export default function App() {
 
         <main className="flex min-w-0 flex-1 flex-col">
           {!windowed && !wide && <MobileBar onMenu={() => setDrawer(true)} />}
-          {health && !health.claude && (
-            <div className="border-b bg-destructive/15 px-5 py-2 text-xs">Claude Code was not found on this machine. Install it with 'npm i -g @anthropic-ai/claude-code' and restart the hub.</div>
-          )}
+          <ClaudeBanner />
           {!windowed && <TerminalTabs />}
           {!windowed && <FileTabs active={view.kind === "file" ? view.path : null} />}
           {/* Replaced by the terminal tabs above for now; kept to bring back. */}

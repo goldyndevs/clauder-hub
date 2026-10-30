@@ -3,6 +3,7 @@ import type {
   Channel,
   ChannelKindInfo,
   ClaudeSettings,
+  ClaudeStatus,
   Folders,
   GlobalInboxItem,
   GlobalProject,
@@ -67,6 +68,9 @@ export interface TerminalSize {
 export const api = {
   health: () => request<Health>("/health"),
 
+  hub: () => hubRequest<{ version: string; claudeStatus: ClaudeStatus | null }>("/hub"),
+  /** Claude Code looked at again, after installing it or signing in. */
+  checkClaude: () => hubRequest<ClaudeStatus>("/claude/check", { method: "POST" }),
   projects: () => hubRequest<ProjectInfo[]>("/projects"),
   addProject: (path: string) => hubRequest<ProjectInfo>("/projects", { method: "POST", body: JSON.stringify({ path }) }),
   openedProject: (id: string) => hubRequest(`/projects/${encodeURIComponent(id)}/open`, { method: "POST" }),

@@ -6,7 +6,7 @@ import type { Server } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
-import { findClaudeCode } from "./claudeCode.js";
+import { checkClaudeCode, findClaudeCode } from "./claudeCode.js";
 import { withProject } from "./context.js";
 import { globalDb } from "./db.js";
 import { fileRoutes } from "./fileRoutes.js";
@@ -217,6 +217,11 @@ const claude = findClaudeCode();
 const underDev = Boolean(process.env.CLAUDER_HUB_DEV);
 for (const project of listProjects()) console.log(`  project : ${project.name.padEnd(24)} ${project.root}${project.exists ? "" : "  (folder missing)"}`);
 console.log(`  claude  : ${claude ?? "not found. Install it with 'npm i -g @anthropic-ai/claude-code'."}`);
+// Whether it runs and is signed in takes a few seconds; said when known, and loudly when it cannot work.
+void checkClaudeCode().then((status) => {
+  if (status.problem) console.warn(`\n  ⚠ ${status.message} Sessions cannot start until then. Fix: ${status.fix}\n`);
+  else if (status.version) console.log(`  claude  : ${status.version}${status.loggedIn ? `, signed in${status.account ? ` as ${status.account}` : ""}` : ""}`);
+});
 console.log(`  ${underDev ? "api    " : "url    "} : http://localhost:${actualPort}${actualPort !== port ? `  (${port} was in use)` : ""}`);
 if (underDev) console.log(`  open    : http://localhost:${webPort}${opened}`);
 else if (opened) console.log(`  open    : http://localhost:${actualPort}${opened}`);

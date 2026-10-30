@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+/* Same tokens as web/src/index.css, so the site and the app feel like one product. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: 48 33% 97%;
+  --foreground: 60 3% 8%;
+  --card: 0 0% 100%;
+  --card-foreground: 60 3% 8%;
+  --primary: 15 63% 60%;
+  --primary-foreground: 48 33% 97%;
+  --secondary: 50 21% 89%;
+  --muted: 50 21% 89%;
+  --muted-foreground: 49 7% 45%;
+  --accent: 50 21% 89%;
+  --destructive: 0 84.2% 60.2%;
+  --success: 142 58% 36%;
+  --success-foreground: 48 33% 97%;
+  --border: 50 21% 89%;
+  --ring: 15 63% 60%;
+  --radius: 0.5rem;
+  --severity-warning: 38 92% 50%;
+  /* The app's terminal is always dark (TerminalView theme). */
+  --term-bg: #141413;
+  --term-fg: #f5f4ee;
+}
+
+.dark {
+  --background: 60 3% 8%;
+  --foreground: 48 33% 97%;
+  --card: 60 3% 11%;
+  --card-foreground: 48 33% 97%;
+  --primary: 15 63% 60%;
+  --primary-foreground: 48 33% 97%;
+  --secondary: 60 3% 16%;
+  --muted: 60 3% 16%;
+  --muted-foreground: 49 7% 60%;
+  --accent: 60 3% 16%;
+  --destructive: 0 62.8% 45%;
+  --success: 142 52% 40%;
+  --success-foreground: 48 33% 97%;
+  --border: 60 3% 20%;
+  --ring: 15 63% 60%;
+  --severity-warning: 38 92% 58%;
+  --term-bg: #0f0f0e;
+}
+
+@theme inline {
+  --font-sans: "Poppins", Arial, sans-serif;
+  --font-serif: "Lora", Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-destructive: hsl(var(--destructive));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-border: hsl(var(--border));
+  --color-ring: hsl(var(--ring));
+  --color-warning: hsl(var(--severity-warning));
+  --color-term: var(--term-bg);
+  --color-term-foreground: var(--term-fg);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --animate-status-pulse: status-pulse 2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.2); }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.3);
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border border-border bg-card;
+  }
+  /* Button language of web/src/components/ui/Button.tsx: solid fills only. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors;
+  }
+  .btn-foreground {
+    @apply bg-foreground text-background hover:bg-foreground/90;
+  }
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+  }
+  .btn-muted {
+    @apply bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground;
+  }
+  .badge {
+    @apply inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium;
+  }
+}
+
+/* Scroll-in reveal; only hidden once JS has marked the page, so no-JS still sees everything. */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+.js [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .js [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}

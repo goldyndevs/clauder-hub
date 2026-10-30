@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { deleteCategory, listCategories, saveCategory } from "./categories.js";
 import { CHANNEL_KINDS, INTERACTION_KINDS, deleteChannel, httpReply, listChannels, mutedProjects, saveChannel, setMuted, testChannel } from "./channels/index.js";
-import { findClaudeCode } from "./claudeCode.js";
+import { checkClaudeCode, claudeStatus, findClaudeCode } from "./claudeCode.js";
 import { iconFile, iconManifest } from "./fileIcons.js";
 import { claudeSettings, EFFORTS, mcpSuggestionsEnabled, PERMISSION_MODES, saveClaudeSettings, setMcpSuggestionsEnabled } from "./claudeSettings.js";
 import { subscribe } from "./events.js";
@@ -53,13 +53,17 @@ api.get(
     projectRoot: projectRoot(),
     project: currentProject().name,
     claude: findClaudeCode(),
+    claudeStatus: claudeStatus(),
     transcriptsDir: transcriptsDir(),
   })),
 );
 
 // The hub ----------------------------------------------------------------
 
-hubApi.get("/hub", wrap(() => ({ ok: true, version: toolVersion, claude: findClaudeCode() })));
+hubApi.get("/hub", wrap(() => ({ ok: true, version: toolVersion, claude: findClaudeCode(), claudeStatus: claudeStatus() })));
+
+/** Claude Code looked at again: after installing it or signing in, without restarting the hub. */
+hubApi.post("/claude/check", wrap(() => checkClaudeCode()));
 
 /** Each project with what it is doing now, for the home page and the switcher. */
 hubApi.get(

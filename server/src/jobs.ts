@@ -1,5 +1,6 @@
 import { Cron } from "croner";
 import { nanoid } from "nanoid";
+import { ClaudeMissing } from "./claudeCode.js";
 import { claudeSettings } from "./claudeSettings.js";
 import { bindProject, currentProject } from "./context.js";
 import { db, now } from "./db.js";
@@ -256,6 +257,9 @@ function advanceSoon(ms: number): void {
   }, ms);
 }
 
+/** Projects whose queue waits for Claude Code to be installed or signed in, with one retry timer each. */
+const waitingForClaude = new Set<string>();
+
 /** Starts the oldest queued run when nothing queued is running. */
 export function advance(): void {
   if (advancing) return;
@@ -280,6 +284,25 @@ export function advance(): void {
       });
       db.prepare("UPDATE runs SET status = 'running', session_id = ?, started_at = ? WHERE id = ?").run(terminal.sessionId, now(), next.id);
     } catch (error) {
+      // Claude Code missing or signed out is fixed on the machine, not in the run: it waits queued and is tried again.
+      if (error instanceof ClaudeMissing) {
+        if (!waitingForClaude.has(currentProject().id)) {
+          waitingForClaude.add(currentProject().id);
+          console.error("[queue] waiting for Claude Code:", error.message);
+          const retry = bindProject(() => {
+            waitingForClaude.delete(currentProject().id);
+            advance();
+          });
+          setTimeout(() => {
+            try {
+              retry();
+            } catch (failure) {
+              console.error("[queue]", (failure as Error).message);
+            }
+          }, 60_000);
+        }
+        return;
+      }
       console.error("[queue] could not start a run:", (error as Error).message);
       db.prepare("UPDATE runs SET status = 'exited', finished_at = ? WHERE id = ?").run(now(), next.id);
       advanceSoon(1000);
