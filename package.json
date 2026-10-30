@@ -1,10 +1,10 @@
 {
   "name": "clauder-hub",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A local dashboard that runs, watches and automates the Claude Code sessions of every project on the machine",
   "license": "MIT",
   "author": "goldyndevs <goldyndevs@gmail.com>",
-  "homepage": "https://github.com/goldyndevs/clauder-hub#readme",
+  "homepage": "https://clauder-hub.sitenow.cloud/",
   "bugs": {
     "url": "https://github.com/goldyndevs/clauder-hub/issues"
   },
