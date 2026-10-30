@@ -5,13 +5,11 @@ import Icon from "../components/Icon.astro";
 import HeroDemo from "../components/HeroDemo.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const repo = "https://github.com/goldyndevs/clauder-hub";
+const npm = "https://www.npmjs.com/package/clauder-hub";
 const title = "Clauder Hub";
 const description = "A handy ADE for Claude Code: one local dashboard over every project's real claude sessions, one inbox of everything Claude waits on, answered from your phone.";
 const install = [
-  "git clone https://github.com/goldyndevs/clauder-hub.git",
-  "cd clauder-hub && npm install",
-  'npm run dev -- "/path/to/your/project"',
+  'npx clauder-hub "/path/to/your/project"',
 ];
 const commands = ["/new", "/run", "/sessions", "/summary", "/stop", "/queue"];
 const toolset = [
@@ -66,7 +64,7 @@ const promises = ["Real claude, real pty", "Nothing installed into Claude Code",
             <Icon name="sun" class="hidden h-4 w-4 dark:block" />
             <Icon name="moon" class="h-4 w-4 dark:hidden" />
           </button>
-          <a href={repo} class="btn btn-foreground px-3 py-1.5 text-xs"><Icon name="github" class="h-3.5 w-3.5" />GitHub</a>
+          <a href={npm} class="btn btn-foreground px-3 py-1.5 text-xs"><Icon name="terminal" class="h-3.5 w-3.5" />npm</a>
         </div>
       </div>
     </header>
@@ -97,10 +95,10 @@ const promises = ["Real claude, real pty", "Nothing installed into Claude Code",
             </div>
             <pre id="install" class="overflow-x-auto px-3 py-3 font-mono text-[12px] leading-relaxed text-term-foreground sm:text-[13px]">{install.map((line) => <span class="block"><span class="select-none text-primary">$ </span>{line}</span>)}</pre>
           </div>
-          <p class="mt-2 text-xs text-muted-foreground">Node.js 22+ and Claude Code logged in. Then open <span class="font-mono">localhost:4328</span>.</p>
+          <p class="mt-2 text-xs text-muted-foreground">Node.js 22+ and Claude Code logged in. Then open <span class="font-mono">localhost:4329</span>.</p>
 
           <div class="mt-6 flex flex-wrap gap-2">
-            <a href={repo} class="btn btn-primary px-5 py-2.5 text-base"><Icon name="github" class="h-4 w-4" />Star on GitHub</a>
+            <a href={npm} class="btn btn-primary px-5 py-2.5 text-base"><Icon name="terminal" class="h-4 w-4" />Get it on npm</a>
             <a href="#features" class="btn btn-muted px-5 py-2.5 text-base">See what it does</a>
           </div>
         </div>
@@ -214,7 +212,7 @@ const promises = ["Real claude, real pty", "Nothing installed into Claude Code",
           <Logo size={56} class="mx-auto" />
           <h2 class="mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">Stop babysitting tabs.</h2>
           <div class="mt-6 flex flex-wrap justify-center gap-2">
-            <a href={repo} class="btn btn-primary px-5 py-2.5 text-base"><Icon name="github" class="h-4 w-4" />Get it on GitHub</a>
+            <a href={npm} class="btn btn-primary px-5 py-2.5 text-base"><Icon name="terminal" class="h-4 w-4" />Get it on npm</a>
             <a href="#start" class="btn btn-muted px-5 py-2.5 text-base">Quick start</a>
           </div>
         </div>
@@ -224,9 +222,9 @@ const promises = ["Real claude, real pty", "Nothing installed into Claude Code",
     <footer class="border-t border-border">
       <div class="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 py-6 text-xs text-muted-foreground sm:flex-row sm:px-6">
         <span class="flex items-center gap-2"><Logo size={16} />Clauder Hub</span>
-        <span class="sm:ml-auto">MIT License, 2026 goldyndevs</span>
-        <a href={repo} class="flex items-center gap-1.5 hover:text-foreground"><Icon name="github" class="h-3.5 w-3.5" />GitHub</a>
-        <a href={`${repo}/issues`} class="hover:text-foreground">Issues</a>
+        <span class="sm:ml-auto">Free to use, 2026 goldyndevs</span>
+        <a href={npm} class="flex items-center gap-1.5 hover:text-foreground"><Icon name="terminal" class="h-3.5 w-3.5" />npm</a>
+        <a href="mailto:goldyndevs@gmail.com" class="hover:text-foreground">Contact</a>
       </div>
     </footer>
 

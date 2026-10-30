@@ -194,36 +194,20 @@ sessions.
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) installed and
   logged in (`claude` on your PATH)
 
-**Run from source (with hot reload)**
+**Install and run**
 
 ```bash
-git clone https://github.com/goldyndevs/clauder-hub.git
-cd clauder-hub
-npm install
-npm run dev -- "/path/to/your/project"
+npx clauder-hub "/path/to/your/project"
+# or keep it installed:
+npm i -g clauder-hub
+clauder-hub "/path/to/your/project"     # 'clauder-hub .' for the current folder
 ```
 
-Open **http://localhost:4328** (the page; the API runs on 4329). The ports
-move up if they are taken; the launcher prints the ones it chose. The hub
-remembers its projects, so later runs can be just `npm run dev`.
-`npm run dev -- --help` lists the options.
-
-**Run the built version**
-
-```bash
-npm run build
-node bin/clauder-hub.mjs "/path/to/your/project"   # or: npx clauder-hub . from inside the repo
-```
-
-The built hub serves page and API together on **http://localhost:4329**
-(`--port <n>` to change it). Running it again with another path while the hub
-is up adds that folder to the running hub.
-
-| Script | What it does |
-| --- | --- |
-| `npm run dev [-- <path>]` | Server (`tsx watch`) and page (Vite) with reload |
-| `npm run build` | Bundles the server (esbuild) and builds the page |
-| `npm run typecheck` | Type-checks server and web |
+Open **http://localhost:4329**. The port moves up if it is taken (`--port <n>`
+to pick one); the hub prints the one it chose. It remembers its projects, so
+later runs can be just `clauder-hub`, and running it again with another path
+while the hub is up adds that folder to the running hub. `clauder-hub --help`
+lists the options.
 
 ---
 
@@ -323,5 +307,5 @@ keeps in `~/.claude`.
 
 ## License
 
-[MIT](LICENSE) © 2026 goldyndevs. Issues and ideas:
-https://github.com/goldyndevs/clauder-hub/issues
+Free to use, not open source: see [LICENSE](LICENSE). © 2026 goldyndevs.
+Questions and ideas: goldyndevs@gmail.com

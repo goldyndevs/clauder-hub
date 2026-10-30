@@ -1,16 +1,20 @@
-MIT License
+Clauder Hub License
 
-Copyright (c) 2026 goldyndevs
+Copyright (c) 2026 goldyndevs. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Clauder Hub is free to use. You may install it from the npm registry and run
+it on any number of your own machines, for personal or commercial work.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+You may not, in whole or in part:
+
+- copy, modify, merge, translate or create derivative works of it;
+- redistribute, sublicense, sell, rent or publish it, or offer it as a hosted
+  service;
+- decompile, reverse engineer or extract its source code, except where the law
+  explicitly permits it regardless of this restriction;
+- remove or alter this license or any copyright notice.
+
+All rights not expressly granted here are reserved by goldyndevs.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -19,3 +23,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Contact: goldyndevs@gmail.com
