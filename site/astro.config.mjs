@@ -2,10 +2,9 @@
 import { defineConfig } from "astro/config";
 import tailwindcss from "@tailwindcss/vite";
 
-// Static build for GitHub Pages: https://goldyndevs.github.io/clauder-hub
+// Static build served at the root of https://clauder-hub.sitenow.cloud.
 export default defineConfig({
-  site: "https://goldyndevs.github.io",
-  base: "/clauder-hub",
+  site: "https://clauder-hub.sitenow.cloud",
   output: "static",
   vite: { plugins: [tailwindcss()] },
 });
