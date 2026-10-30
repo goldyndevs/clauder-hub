@@ -200,7 +200,7 @@ export function createSlack(config: SlackConfig, onReply: ReplyHandler): Channel
         if (envelope.type !== "events_api" || event?.type !== "message") return;
         // Our own posts, edits and joins all arrive here too.
         if (event.bot_id || event.subtype || event.channel !== config.channel || !event.text) return;
-        void onReply({ text: fromSlack(event.text), from: `slack:${event.user}`, thread: event.thread_ts, ref: event.thread_ts }).then((answer) => {
+        void onReply({ text: fromSlack(event.text), from: `slack:${event.user}`, thread: event.thread_ts }).then((answer) => {
           if (answer) void postAnswer(answer, event.thread_ts ?? event.ts).catch(() => undefined);
         });
       });

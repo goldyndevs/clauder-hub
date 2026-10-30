@@ -1,12 +1,16 @@
 {
   "name": "clauder-hub",
   "version": "0.1.0",
-  "description": "A local dashboard that runs, watches and automates Claude Code sessions for one project",
+  "description": "A local dashboard that runs, watches and automates the Claude Code sessions of every project on the machine",
   "license": "MIT",
-  "author": "goldynlabs",
+  "author": "goldyndevs <goldyndevs@gmail.com>",
+  "homepage": "https://github.com/goldyndevs/clauder-hub#readme",
+  "bugs": {
+    "url": "https://github.com/goldyndevs/clauder-hub/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/goldynlabs/clauder-hub.git"
+    "url": "git+https://github.com/goldyndevs/clauder-hub.git"
   },
   "type": "module",
   "engines": {

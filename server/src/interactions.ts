@@ -231,16 +231,38 @@ export async function answerInteraction(id: string, answer: string, by: string):
   return answered;
 }
 
+/** How an interaction that is no longer open ended, in words for whoever replied to it late. */
+function ended(interaction: Interaction): string {
+  const by = interaction.answeredBy ?? "";
+  if (interaction.status === "answered") return `That was already answered${by ? ` by ${by.replace(/^(telegram|slack):/, "")}` : ""}${interaction.answer ? `: ${interaction.answer.slice(0, 80)}` : ""}.`;
+  if (by === "superseded") return "That question is over: the session moved on.";
+  if (by === "hub restart") return "That question went away when the hub restarted.";
+  if (by === "session end") return "That session ended before it was answered.";
+  return by ? `That was already answered in the ${by}.` : "That question is over.";
+}
+
+/** What a session that has moved on asks now, as a pointer: the newer message is the one to answer. */
+function newer(sessionId: string): string {
+  const open = listInteractions({ sessionId, status: "open" })[0];
+  return open ? ` It is waiting on something newer now ("${open.title}"): reply to that message instead.` : "";
+}
+
 /**
  * A reply from a channel that may or may not name what it answers. It goes to
  * the interaction it names, else to the newest open one on the session, else,
- * when the session is live, straight in as the next message.
+ * when the session is live, straight in as the next message, and when it has
+ * stopped, the session is resumed with it.
+ *
+ * A reply to a question or a permission that is over never answers another
+ * one: a late "yes" to an old dialog must not approve the dialog showing now.
+ * A reply to the end of a turn (or a done report) continues the conversation,
+ * unless the session now waits on a dialog.
  */
 export async function routeReply(input: { sessionId?: string | null; interactionId?: string | null; text: string; by: string; choice?: string }): Promise<string> {
   if (input.interactionId) {
     const target = getInteraction(input.interactionId);
     if (input.choice) {
-      if (!target || target.status !== "open") return target ? `Already ${target.status}${target.answeredBy ? ` by ${target.answeredBy}` : ""}.` : "That question is gone.";
+      if (!target || target.status !== "open") return target ? `${ended(target)}${newer(target.sessionId)}` : "That question is gone.";
       const answered = await chooseInteraction(target.id, input.choice, input.by);
       return `Sent: ${answered.answer}`;
     }
@@ -248,7 +270,11 @@ export async function routeReply(input: { sessionId?: string | null; interaction
       await answerInteraction(target.id, input.text, input.by);
       return "Sent to the session.";
     }
-    input.sessionId ??= target?.sessionId;
+    if (!target) return "That question is gone.";
+    if (target.kind !== "turn" && target.kind !== "done") return `${ended(target)}${newer(target.sessionId)}`;
+    const current = listInteractions({ sessionId: target.sessionId, status: "open" })[0];
+    if (current && current.kind !== "turn") return `The session has moved on since that message.${newer(target.sessionId)}`;
+    input.sessionId ??= target.sessionId;
   }
   let sessionId = input.sessionId ?? null;
   if (!sessionId) {
@@ -264,7 +290,14 @@ export async function routeReply(input: { sessionId?: string | null; interaction
     return "Sent to the session.";
   }
   const terminal = terminalForSession(sessionId);
-  if (!terminal) return "That session is not running any more.";
+  if (!terminal) {
+    // Stopped (or the hub restarted since): picked up again with the message, as a person would from the dashboard.
+    const session = listSessions().find((item) => item.id === sessionId);
+    if (!session) return "That session is gone.";
+    if (session.origin === "external" && session.live) return "That session is running outside the hub, so the hub cannot type into it.";
+    const { resumeWith } = await import("./channels/commands.js");
+    return resumeWith(sessionId, input.text) as string;
+  }
   await typeMessage(terminal, input.text);
   setSessionStatus(sessionId, "running");
   return "Sent to the session as a new message.";

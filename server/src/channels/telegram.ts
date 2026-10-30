@@ -85,22 +85,42 @@ export function createTelegram(config: TelegramConfig, onReply: ReplyHandler, { 
   let abort: AbortController | null = null;
 
   const call = async (method: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<any> => {
-    const response = await fetch(`https://api.telegram.org/bot${config.botToken}/${method}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal,
-    });
-    const payload = (await response.json()) as any;
-    if (!payload.ok) throw new Error(`Telegram ${method}: ${payload.description ?? response.status}`);
-    return payload.result;
+    // Many messages at once hit Telegram's rate limit; it says how long to wait, and the message goes then rather than never.
+    for (let attempt = 0; ; attempt += 1) {
+      const response = await fetch(`https://api.telegram.org/bot${config.botToken}/${method}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      });
+      const payload = (await response.json()) as any;
+      if (payload.ok) return payload.result;
+      const wait = Number(payload.parameters?.retry_after ?? 0);
+      if (response.status === 429 && wait > 0 && wait <= 60 && attempt < 5 && !stopped) {
+        await new Promise((resolve) => setTimeout(resolve, wait * 1000 + 250));
+        continue;
+      }
+      throw new Error(`Telegram ${method}: ${payload.description ?? response.status}`);
+    }
+  };
+
+  /**
+   * The hub's answers and a person's own messages are not in the hub's refs,
+   * so a reply to one of them is taken as a reply to the message it answered:
+   * <message id> -> <the message replied to>. In memory, the latest few hundred.
+   */
+  const leadsTo = new Map<number, number>();
+  const chain = (messageId: number, to: number) => {
+    leadsTo.set(messageId, leadsTo.get(to) ?? to);
+    if (leadsTo.size > 500) leadsTo.delete(leadsTo.keys().next().value!);
   };
 
   /** Sends a command's answer; a card that started something learns where it landed, so replies to it are routed. */
-  const sendAnswer = async (answer: Exclude<ChannelAnswer, null>, replyTo?: number) => {
+  const sendAnswer = async (answer: Exclude<ChannelAnswer, null>, replyTo?: number, about?: number) => {
     const where = replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {};
     const sent = await call("sendMessage", { chat_id: config.chatId, ...answerBody(answer), ...where });
     if (typeof answer !== "string") answer.onSent?.({ ref: String(sent.message_id), thread: String(sent.message_id) });
+    else if (about) chain(sent.message_id, about);
   };
 
   /** A command button: the menu it sits in turns into the answer, as BotFather's do; what starts a session comes as a new message. */
@@ -146,18 +166,33 @@ export function createTelegram(config: TelegramConfig, onReply: ReplyHandler, { 
         for (const update of updates) {
           offset = update.update_id + 1;
           if (update.callback_query) {
-            await onButton(update.callback_query);
+            await onButton(update.callback_query).catch((error: Error) => console.error("[telegram] could not handle a button:", error.message));
             continue;
           }
           const message = update.message;
-          if (!message?.text || String(message.chat?.id) !== String(config.chatId)) continue;
-          const replyTo = message.reply_to_message?.message_id;
-          const answer = await onReply({
-            text: message.text,
-            from: `telegram:${message.from?.username ?? message.from?.id}`,
-            ref: replyTo ? String(replyTo) : undefined,
-          });
-          if (answer) await sendAnswer(answer, message.message_id).catch(() => undefined);
+          if (!message || String(message.chat?.id) !== String(config.chatId) || message.from?.is_bot) continue;
+          const replied: number | undefined = message.reply_to_message?.message_id;
+          const about = replied ? (leadsTo.get(replied) ?? replied) : undefined;
+          if (!message.text) {
+            // A photo, voice note or file cannot be typed into a terminal; saying so beats silence.
+            if (message.photo || message.voice || message.audio || message.video || message.video_note || message.document || message.sticker) {
+              await sendAnswer("Only text reaches a session. Send your answer as a text message.", message.message_id).catch(() => undefined);
+            }
+            continue;
+          }
+          if (about) chain(message.message_id, about);
+          try {
+            const answer = await onReply({
+              text: message.text,
+              from: `telegram:${message.from?.username ?? message.from?.id}`,
+              ref: about ? String(about) : undefined,
+            });
+            if (answer) await sendAnswer(answer, message.message_id, about).catch(() => undefined);
+          } catch (error) {
+            // One message that fails must not hold up the rest.
+            console.error("[telegram] could not handle a message:", (error as Error).message);
+            await sendAnswer(`Could not handle that: ${(error as Error).message}`, message.message_id).catch(() => undefined);
+          }
         }
       } catch (error) {
         if (stopped) return;
@@ -180,6 +215,8 @@ export function createTelegram(config: TelegramConfig, onReply: ReplyHandler, { 
     stop() {
       stopped = true;
       abort?.abort();
+      // Telegram forgets updates only when asked for the next ones: this tells it what was handled, so a restart does not handle them twice.
+      if (offset && config.botToken) void call("getUpdates", { offset, timeout: 0, limit: 1 }).catch(() => undefined);
     },
     async send(message: OutboundMessage): Promise<SentMessage | null> {
       if (!config.botToken || !config.chatId) return null;

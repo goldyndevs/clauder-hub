@@ -324,14 +324,18 @@ function lookupRefs(channelId: string, reply: InboundReply): { sessionId: string
   let sessionId = reply.sessionId ?? null;
   let interactionId = reply.interactionId ?? null;
   let projectId: string | null = null;
-  for (const key of [reply.ref, reply.thread]) {
+  // A reply to a message answers what that message asked; a message in a session's thread is for the session, whatever is open in it now.
+  for (const [key, exact] of [
+    [reply.ref, true],
+    [reply.thread, false],
+  ] as const) {
     if (!key || sessionId) continue;
     const row = db.prepare("SELECT session_id, interaction_id, project_id FROM channel_refs WHERE channel_id = ? AND ref = ?").get(channelId, key) as
       | { session_id: string; interaction_id: string | null; project_id: string | null }
       | undefined;
     if (row) {
       sessionId = row.session_id;
-      interactionId ??= row.interaction_id;
+      if (exact) interactionId ??= row.interaction_id;
       projectId = row.project_id;
     }
   }
