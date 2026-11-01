@@ -25,6 +25,8 @@ export interface Terminal {
   /** Recent output, replayed to a client that attaches later. */
   backlog: string[];
   backlogSize: number;
+  /** When it last printed anything (ms), for telling a run that waits from one that works (watchdog.ts). */
+  lastOutputAt: number;
   cols: number;
   rows: number;
   /** Stopped on purpose to be resumed at once (an MCP was installed), so its exit ends nothing. */
@@ -89,6 +91,7 @@ export function spawnTerminal(input: { file: string; args: string[]; sessionId: 
     clients: new Set(),
     backlog: [],
     backlogSize: 0,
+    lastOutputAt: Date.now(),
     cols,
     rows,
   };
@@ -98,6 +101,7 @@ export function spawnTerminal(input: { file: string; args: string[]; sessionId: 
   child.onData(bindProject((data: string) => {
     terminal.backlog.push(data);
     terminal.backlogSize += data.length;
+    terminal.lastOutputAt = Date.now();
     while (terminal.backlogSize > BACKLOG_LIMIT && terminal.backlog.length > 1) {
       terminal.backlogSize -= terminal.backlog.shift()!.length;
     }

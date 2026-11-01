@@ -44,6 +44,10 @@ channels (Slack, Telegram, webhooks) that relay what sessions ask.
 - **The terminal is not reimplemented.** The page shows the pty as it is. An
   answer from a channel or the dashboard is delivered by typing into the pty
   (`terminals.ts`: `pressKeys`, `typeMessage`), never by another API.
+- **What hooks cannot see is read from the screen.** `watchdog.ts`: Claude Code's trust-folder dialog
+  (before any hook) becomes a question answered by typing 1 or 2; an unattended run whose screen has not
+  changed for 8 minutes is reported once as stuck (a turn: a reply types into it). Nothing is decided for
+  the person.
 - **Hooks never decide and never wait.** `/api/hooks/:token` answers `{}`
   before doing anything (`routes.ts`), so a hook can neither approve nor delay
   a tool call. Keep it that way.

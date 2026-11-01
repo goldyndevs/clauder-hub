@@ -6,6 +6,7 @@ import { GLOBAL_ID, setContexts, withProject, type Project } from "./context.js"
 import { globalDb, now, openProjectDb } from "./db.js";
 import { broadcast } from "./events.js";
 import { startInteractionSweeper } from "./interactions.js";
+import { startWatchdog } from "./watchdog.js";
 import { advance, recoverRuns, startScheduler, stopScheduler } from "./jobs.js";
 import { claudeHome, hubHome, projectSlug, projectsDir } from "./paths.js";
 import { killProjectTerminals, waitForExit } from "./terminals.js";
@@ -81,7 +82,7 @@ export function bootGlobal(): Project {
   };
   const stops = withProject(project, () => {
     recoverRuns();
-    const list = [startTranscriptWatcher(), startInteractionSweeper(), stopChannels];
+    const list = [startTranscriptWatcher(), startInteractionSweeper(), startWatchdog(), stopChannels];
     startChannels({ device: false });
     return list;
   });
@@ -169,7 +170,7 @@ function boot(row: Row): Project {
     withProject(project, () => {
       const stranded = recoverRuns();
       if (stranded) console.log(`  note    : ${row.name}: ${stranded} queued run(s) were running when the hub last stopped`);
-      stops.push(startTranscriptWatcher(), startInteractionSweeper());
+      stops.push(startTranscriptWatcher(), startInteractionSweeper(), startWatchdog());
       stops.push(stopChannels);
       startChannels();
       stops.push(stopScheduler);

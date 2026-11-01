@@ -155,6 +155,12 @@ export class AnswerError extends Error {}
 /** Option numbers for a question: "2", or "1,3" for several questions. Anything else is a typed answer. */
 async function answerQuestion(interaction: Interaction, answer: string): Promise<void> {
   const terminal = terminalForSession(interaction.sessionId)!;
+  // The trust-folder dialog (watchdog.ts) takes arrows and Enter, not numbers; imported by name to avoid an import cycle.
+  if (interaction.data.trust) {
+    const { answerTrust } = await import("./watchdog.js");
+    await answerTrust(terminal, answer.trim() !== "2");
+    return;
+  }
   const questions: Array<{ options?: unknown[] }> = interaction.data.questions ?? [];
   // One line per question (the dashboard), or "1,2" typed on a channel; lines keep typed answers with commas whole.
   const split = answer.includes("\n") ? answer.split("\n") : answer.split(/[;,]/);
