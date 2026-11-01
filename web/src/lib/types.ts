@@ -217,6 +217,8 @@ export interface Run {
   category: string;
   status: "queued" | "running" | "done" | "exited" | "cancelled";
   sessionId: string | null;
+  /** Queued again to carry on its own session. */
+  resume: boolean;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;

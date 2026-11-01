@@ -1,6 +1,6 @@
 import { bindProject, currentProject } from "../context.js";
 import { db, now } from "../db.js";
-import { cancelRun, enqueue, getJob, listJobs, listRuns, type Job } from "../jobs.js";
+import { cancelRun, enqueue, getJob, listJobs, listRuns, resumeRun, type Job, type Run } from "../jobs.js";
 import { renderPrompt } from "../prompts.js";
 import { askSmallModel, jsonIn, pickNumbers } from "../smallModel.js";
 import { listSessions, startSession, type SessionView } from "../sessions.js";
@@ -50,7 +50,7 @@ export function isCommand(text: string): boolean {
   return COMMAND.test(text.trim());
 }
 
-const HUB_COMMANDS = new Set(["start", "help", "new", "run", "jobs", "job", "job!", "cancel", "leave", "sessions", "session", "summary", "stop", "stop!", "queue", "cancelrun"]);
+const HUB_COMMANDS = new Set(["start", "help", "new", "run", "jobs", "job", "job!", "resume", "resume!", "cancel", "leave", "sessions", "session", "summary", "stop", "stop!", "queue", "cancelrun"]);
 
 /** One of the hub's own commands; any other "/word" (Claude's /compact, /clear...) is for the picked session. */
 export function isHubCommand(text: string): boolean {
@@ -226,6 +226,9 @@ function jobPicker(title: string, jobs: Job[], empty: string): ChannelAnswer {
   };
 }
 
+/** Runs that stopped before they were done and can carry on (Resume queues them again on their own session). */
+const resumable = (): Run[] => listRuns(50).filter((run) => run.sessionId && run.status === "exited").slice(0, 10);
+
 function queueCard(): ChannelAnswer {
   const runs = listRuns(50).filter((run) => run.status === "queued" || run.status === "running");
   if (!runs.length) return "The queue is empty.";
@@ -288,6 +291,7 @@ const COMMAND_GUIDE = [
   "run <what to do> - queue an unattended run",
   "jobs - list the saved jobs, to run one",
   "job <name> - run a saved job now (asks first)",
+  "resume - carry on a stopped run (asks first)",
   "sessions - list the sessions",
   "session <number> - pick a session, to talk to it",
   "summary <number> - what a session did",
@@ -325,7 +329,7 @@ export async function interpret(channelId: string, from: string, text: string, o
   return suggestCard(channelId, from, "🤔 Did you mean?", choices);
 }
 
-const GUESSABLE = new Set(["new", "run", "jobs", "job", "sessions", "session", "summary", "stop", "queue", "help"]);
+const GUESSABLE = new Set(["new", "run", "jobs", "job", "resume", "sessions", "session", "summary", "stop", "queue", "help"]);
 
 /** Runs a typed command ("/new fix the build") or a pressed button ("summary <id>"). */
 export async function runCommand(channelId: string, input: string, from: string, options: CommandOptions = {}): Promise<ChannelAnswer> {
@@ -385,6 +389,32 @@ export async function runCommand(channelId: string, input: string, from: string,
       if (!job) return `That job is gone. ${p}jobs lists them.`;
       const { position } = enqueue({ job, source: "manual" });
       return { title: `🗂 ${job.name} queued`, lines: [renderPrompt("channel.queued", { position: String(position) })], buttons: [[{ label: "🗂 Queue", command: "queue" }]] };
+    }
+    case "resume": {
+      const runs = resumable();
+      const run = arg ? runs.find((item) => item.id === arg) ?? runs[Number(arg) - 1] : undefined;
+      if (!run) {
+        if (!runs.length) return "No stopped run to resume.";
+        return {
+          title: "⏯ Resume which run?",
+          lines: runs.map((item, index) => `${index + 1}. ${short(flat(item.jobName ?? item.prompt), 80)} · stopped ${item.finishedAt ? new Date(item.finishedAt).toLocaleString() : ""}`),
+          buttons: runs.map((item, index) => [{ label: short(`⏯ ${index + 1}. ${flat(item.jobName ?? item.prompt)}`, 60), command: `resume ${item.id}` }]),
+        };
+      }
+      return {
+        title: "⏯ Resume the run?",
+        lines: [renderPrompt("channel.resumeConfirm", { run: flat(run.jobName ?? short(run.prompt, 80)) })],
+        buttons: [
+          [
+            { label: "Yes, resume it", command: `resume! ${run.id}`, tone: "primary" },
+            { label: "No", command: "cancel" },
+          ],
+        ],
+      };
+    }
+    case "resume!": {
+      const { run, position } = resumeRun(arg);
+      return { title: `⏯ ${flat(run.jobName ?? short(run.prompt, 60))} queued again`, lines: [renderPrompt("channel.queued", { position: String(position) })], buttons: [[{ label: "🗂 Queue", command: "queue" }]] };
     }
     case "cancel":
       suggested.delete(suggestKey(channelId, from));
@@ -456,6 +486,7 @@ export const GLOBAL_COMMAND_MENU = [
   { command: "new", description: "Start a session in the picked project" },
   { command: "run", description: "Queue a run in the picked project" },
   { command: "jobs", description: "The picked project's jobs, to run one" },
+  { command: "resume", description: "Carry on a stopped run in the picked project" },
   { command: "sessions", description: "The picked project's sessions" },
   { command: "summary", description: "What a session did" },
   { command: "stop", description: "Stop a running session" },
@@ -469,6 +500,7 @@ export const COMMAND_MENU = [
   { command: "new", description: "Start a session" },
   { command: "run", description: "Queue an unattended run" },
   { command: "jobs", description: "Run a saved job" },
+  { command: "resume", description: "Carry on a stopped run" },
   { command: "sessions", description: "Pick a session" },
   { command: "summary", description: "What a session did" },
   { command: "stop", description: "Stop a running session" },

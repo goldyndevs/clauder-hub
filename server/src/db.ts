@@ -198,6 +198,9 @@ CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status, created_at);
   // In the global context, which project a channel message or thread belongs to; null in a project's own.
   ensureColumn("channel_refs", "project_id", "TEXT");
   ensureColumn("channel_threads", "project_id", "TEXT");
+  // A stopped run queued again to resume its own session (1), and when it joined the queue (its place in line).
+  ensureColumn("runs", "resume", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn("runs", "queued_at", "TEXT");
 }
 
 export function now(): string {

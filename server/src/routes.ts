@@ -11,7 +11,7 @@ import { subscribe } from "./events.js";
 import { handleHook } from "./hooks.js";
 import { AnswerError, answerInteraction, chooseInteraction, listInteractions, withPresentation } from "./interactions.js";
 import { isDefinitionFile, isMemoryFile, memoryFiles, readInventory } from "./inventory.js";
-import { cancelRun, deleteJob, enqueue, getJob, listJobs, listRuns, rotateToken, saveJob } from "./jobs.js";
+import { cancelRun, deleteJob, enqueue, getJob, listJobs, listRuns, resumeRun, rotateToken, saveJob, stopRun } from "./jobs.js";
 import { catalogEntry, MCP_CATALOG } from "./mcpCatalog.js";
 import { deleteSuggestion, installServer, installSuggestion, listSuggestions, skipSuggestion } from "./mcpSuggestions.js";
 import { currentProject, withProject } from "./context.js";
@@ -463,6 +463,8 @@ api.post(
 );
 
 api.get("/runs", wrap(() => listRuns()));
+api.post("/runs/:id/stop", wrap((req) => stopRun(req.params.id)));
+api.post("/runs/:id/resume", wrap((req) => resumeRun(req.params.id)));
 api.post("/runs", wrap((req) => enqueue({ source: "manual", prompt: String(req.body?.prompt ?? ""), category: req.body?.category || "auto" })));
 api.post("/runs/:id/cancel", wrap((req) => cancelRun(req.params.id)));
 

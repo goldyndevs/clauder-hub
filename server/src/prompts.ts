@@ -103,6 +103,14 @@ If the category was given as "auto", choose the one that fits the task best. Do 
 Finish what is missing, then send the done block again.`,
   },
   {
+    key: "typed.resumeRun",
+    label: "First message of a resumed run",
+    audience: "claude-typed",
+    description: "Typed into a stopped run's own session when it is resumed from the queue (Resume on the Automation page, /resume on a channel).",
+    placeholders: [],
+    text: "You were stopped part-way through this task. Check what is already done, then carry on from where you left off, without redoing finished work.",
+  },
+  {
     key: "typed.addMcp",
     label: "First message of an Add MCP server task",
     audience: "claude-typed",
@@ -253,6 +261,7 @@ Reply *install* to run it (project scope) and resume the session, or *skip* to c
 {{p}}new - start a session (with a prompt, or I ask for one)
 {{p}}run - queue an unattended run
 {{p}}jobs - the saved jobs, to run one ({{p}}job <name> runs one by name)
+{{p}}resume - carry on a stopped run
 {{p}}sessions - the sessions, to pick one
 {{p}}summary - what a session did
 {{p}}stop - stop a running session
@@ -307,7 +316,7 @@ Reply to this message to talk to the session. Its questions come here too.`,
 {{p}}projects - the projects, to pick one
 {{p}}use <project> - work on a project
 {{p}}addproject <words> - add a project: describe it, I find the folder
-Then, on that project: {{p}}new, {{p}}run, {{p}}jobs, {{p}}sessions, {{p}}summary, {{p}}stop, {{p}}queue, {{p}}cancel.
+Then, on that project: {{p}}new, {{p}}run, {{p}}jobs, {{p}}resume, {{p}}sessions, {{p}}summary, {{p}}stop, {{p}}queue, {{p}}cancel.
 
 Working on: {{current}}`,
   },
@@ -336,12 +345,20 @@ Working on: {{current}}`,
     text: "Run {{job}} now? It joins the queue as an unattended run; its questions and its result come here.\n\n{{prompt}}",
   },
   {
+    key: "channel.resumeConfirm",
+    label: "Channel command: confirming a resume",
+    audience: "channel",
+    description: "Asked before a stopped run is queued again to carry on its own session ({{p}}resume).",
+    placeholders: ["run"],
+    text: "Resume {{run}}? It joins the back of the queue and carries on its own conversation from where it stopped.",
+  },
+  {
     key: "channel.stopConfirm",
     label: "Channel command: confirming a stop",
     audience: "channel",
     description: "Asked before a session is stopped from the channel.",
     placeholders: ["session"],
-    text: "Stop {{session}}? Its terminal closes; the conversation is kept and can be resumed from the dashboard.",
+    text: "Stop {{session}}? Its terminal closes; the conversation is kept and can be resumed from the dashboard, or with resume for a run.",
   },
 ];
 

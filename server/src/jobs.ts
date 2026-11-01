@@ -5,9 +5,9 @@ import { claudeSettings } from "./claudeSettings.js";
 import { bindProject, currentProject } from "./context.js";
 import { db, now } from "./db.js";
 import { broadcast } from "./events.js";
-import { render } from "./prompts.js";
+import { promptText, render } from "./prompts.js";
 import { getSessionRow, setSessionStatus, startSession } from "./sessions.js";
-import { onTerminalExit } from "./terminals.js";
+import { killTerminal, onTerminalExit, terminalForSession } from "./terminals.js";
 import { getPreset } from "./toolset.js";
 
 /**
@@ -42,6 +42,8 @@ export interface Run {
   category: string;
   status: "queued" | "running" | "done" | "exited" | "cancelled";
   sessionId: string | null;
+  /** Queued again to carry on its own session (Resume), rather than to start a new one. */
+  resume: boolean;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -180,7 +182,9 @@ interface RunRow {
   category: string;
   status: Run["status"];
   session_id: string | null;
+  resume: number;
   created_at: string;
+  queued_at: string | null;
   started_at: string | null;
   finished_at: string | null;
   job_name: string | null;
@@ -195,6 +199,7 @@ const toRun = (row: RunRow): Run => ({
   category: row.category,
   status: row.status,
   sessionId: row.session_id,
+  resume: Boolean(row.resume),
   createdAt: row.created_at,
   startedAt: row.started_at,
   finishedAt: row.finished_at,
@@ -223,10 +228,44 @@ export function enqueue(input: { job?: Job; source: Run["source"]; payload?: unk
   if (input.job) db.prepare("UPDATE jobs SET last_run_at = ? WHERE id = ?").run(now(), input.job.id);
   broadcast("runs", {});
   broadcast("jobs", {});
-  const position = (db.prepare("SELECT COUNT(*) AS n FROM runs WHERE status = 'queued' AND created_at <= (SELECT created_at FROM runs WHERE id = ?)").get(id) as { n: number }).n;
+  const position = queuePosition(id);
   advance();
   const run = listRuns(500).find((item) => item.id === id)!;
   return { run, position };
+}
+
+/** A queued run's place in line: by when it joined the queue (a resumed run joins at the back). */
+const IN_LINE = "COALESCE(queued_at, created_at)";
+function queuePosition(id: string): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM runs WHERE status = 'queued' AND ${IN_LINE} <= (SELECT ${IN_LINE} FROM runs WHERE id = ?)`).get(id) as { n: number }).n;
+}
+
+/**
+ * Stops a running run: its terminal closes, the conversation is kept, and the
+ * queue moves on. Resume it later with resumeRun.
+ */
+export function stopRun(id: string): void {
+  const run = listRuns(500).find((item) => item.id === id);
+  if (!run || run.status !== "running" || !run.sessionId) throw new Error("That run is not running.");
+  const terminal = terminalForSession(run.sessionId);
+  if (!terminal) throw new Error("That run has no running terminal.");
+  killTerminal(terminal);
+}
+
+/**
+ * Queues a stopped run again to carry on its own session (claude --resume),
+ * at the back of the line, so it never runs beside another run of the project.
+ */
+export function resumeRun(id: string): { run: Run; position: number } {
+  const run = listRuns(500).find((item) => item.id === id);
+  if (!run?.sessionId) throw new Error("That run never started, so there is nothing to resume.");
+  if (run.status === "queued" || run.status === "running") throw new Error("That run is already queued or running.");
+  if (terminalForSession(run.sessionId)) throw new Error("Its session is already open.");
+  db.prepare("UPDATE runs SET status = 'queued', resume = 1, queued_at = ?, finished_at = NULL WHERE id = ?").run(now(), id);
+  broadcast("runs", {});
+  const position = queuePosition(id);
+  advance();
+  return { run: listRuns(500).find((item) => item.id === id)!, position };
 }
 
 export function cancelRun(id: string): void {
@@ -267,11 +306,14 @@ export function advance(): void {
   try {
     const running = db.prepare("SELECT id FROM runs WHERE status = 'running' LIMIT 1").get();
     if (running) return;
-    const next = db.prepare("SELECT * FROM runs WHERE status = 'queued' ORDER BY created_at LIMIT 1").get() as RunRow | undefined;
+    const next = db.prepare(`SELECT * FROM runs WHERE status = 'queued' ORDER BY ${IN_LINE} LIMIT 1`).get() as RunRow | undefined;
     if (!next) return;
     const job = next.job_id ? getJob(next.job_id) : null;
     try {
-      const terminal = startSession({
+      // A resumed run carries on its own conversation; it keeps its unattended mode and toolset from the session row.
+      const terminal = next.resume && next.session_id
+        ? startSession({ resumeId: next.session_id, prompt: promptText("typed.resumeRun"), runId: next.id, permissionMode: claudeSettings().runPermissionMode })
+        : startSession({
         prompt: next.prompt,
         origin: next.source === "manual" ? "queue" : next.source,
         runId: next.id,

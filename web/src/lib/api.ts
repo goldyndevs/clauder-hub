@@ -141,6 +141,8 @@ export const api = {
   runs: () => request<Run[]>("/runs"),
   queueRun: (prompt: string, category: string) => post("/runs", { prompt, category }),
   cancelRun: (id: string) => post(`/runs/${id}/cancel`),
+  stopRun: (id: string) => post(`/runs/${id}/stop`),
+  resumeRun: (id: string) => post<{ position: number }>(`/runs/${id}/resume`),
 
   toolsetCatalog: () => request<CatalogItem[]>("/toolset/catalog"),
   setSessionToolset: (id: string, toolset: Toolset) => put<{ restarted: boolean; terminalId?: string }>(`/sessions/${id}/toolset`, { toolset }),

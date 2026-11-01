@@ -1,4 +1,4 @@
-import { CalendarClock, CircleHelp, Pencil, Play, Plus, RefreshCw, Trash2, Webhook, X } from "lucide-react";
+import { CalendarClock, CircleHelp, Pencil, Play, Plus, RefreshCw, Square, StepForward, Trash2, Webhook, X } from "lucide-react";
 import { api } from "../lib/api";
 import { projectApi } from "../lib/project";
 import { ago, when } from "../lib/format";
@@ -165,10 +165,10 @@ function HowToRun({ job, curl }: { job: Job; curl: string }) {
         <HowStep title="No schedule">It runs only when started one of the ways below.</HowStep>
       )}
       <HowStep title="From this page">
-        Press <Play size={11} className="inline" /> Run. It asks first, then joins the project&rsquo;s queue (one run at a time).
+        Press <Play size={11} className="inline" /> Run. It asks first, then joins the project&rsquo;s queue (one run at a time). In the queue below, <Square size={10} className="inline" /> stops a running run and <StepForward size={10} className="inline" /> resumes a stopped one where it left off.
       </HowStep>
       <HowStep title="From a channel">
-        <span className="font-mono">/job {job.name}</span> on Telegram (<span className="font-mono">!job</span> on Slack), or <span className="font-mono">/jobs</span> and pick it. It asks before it queues.
+        <span className="font-mono">/job {job.name}</span> on Telegram (<span className="font-mono">!job</span> on Slack), or <span className="font-mono">/jobs</span> and pick it. It asks before it queues. <span className="font-mono">/stop</span> stops it, <span className="font-mono">/resume</span> carries it on.
       </HowStep>
       {job.kind === "webhook" && (
         <HowStep title="From another tool (webhook)">
@@ -209,11 +209,14 @@ const RUN_TONE: Record<Run["status"], "on" | "off" | "success" | "warning" | "cr
 
 function RunTable({ runs }: { runs: Run[] }) {
   const go = useStore((state) => state.go);
+  const confirm = useConfirm();
+  const label = (run: Run) => run.jobName ?? run.prompt.slice(0, 60);
   return (
     <div className="divide-y rounded-md border">
       {runs.map((run) => (
         <div key={run.id} className="flex items-center gap-2 px-3 py-2 text-xs">
           <StatusBadge tone={RUN_TONE[run.status]}>{run.status}</StatusBadge>
+          {run.resume && <StatusBadge tone="off" title="Queued again to carry on its own session">resumed</StatusBadge>}
           <span className="hidden w-16 shrink-0 text-[11px] text-muted-foreground sm:block">{run.source}</span>
           <span className="min-w-0 flex-1 truncate">
             {run.jobName && <span className="font-medium">{run.jobName}: </span>}
@@ -223,6 +226,34 @@ function RunTable({ runs }: { runs: Run[] }) {
           {run.sessionId && (
             <Button variant="ghost" size="sm" onClick={() => go({ kind: "session", id: run.sessionId! })}>
               Open
+            </Button>
+          )}
+          {run.status === "running" && run.sessionId && (
+            <Button variant="ghost" size="icon" title="Stop" onClick={() =>
+                void confirm({
+                  title: `Stop '${label(run)}'?`,
+                  description: "Its terminal closes and the queue moves on. The conversation is kept: Resume carries on from where it stopped.",
+                  confirmLabel: "Stop",
+                  tone: "destructive",
+                  run: () => api.stopRun(run.id),
+                })
+              }>
+              <Square size={13} />
+            </Button>
+          )}
+          {run.status === "exited" && run.sessionId && (
+            <Button variant="ghost" size="icon" title="Resume" onClick={() =>
+                void confirm({
+                  title: `Resume '${label(run)}'?`,
+                  description: "Joins the back of the queue as an unattended run and carries on its own conversation from where it stopped.",
+                  confirmLabel: "Queue it",
+                  run: async () => {
+                    const { position } = await api.resumeRun(run.id);
+                    useStore.getState().notify(`Queued, number ${position} in line.`);
+                  },
+                })
+              }>
+              <StepForward size={13} />
             </Button>
           )}
           {run.status === "queued" && (
