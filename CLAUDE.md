@@ -88,7 +88,7 @@ channels (Slack, Telegram, webhooks) that relay what sessions ask.
   into the answer). The channel prompts in `prompts.ts` stay as the plain-text
   notification and fallback.
 - **Channel commands, BotFather style.** `channels/commands.ts`: `/new`,
-  `/run`, `/sessions`, `/summary`, `/stop`, `/queue`, `/cancel`, `/help`
+  `/run`, `/jobs` and `/job <name>` (a saved job, asked before it queues), `/sessions`, `/summary`, `/stop`, `/queue`, `/cancel`, `/help`
   (`!` on Slack, which takes `/` for its own). Answers are `ChannelCard`s
   (title, lines, quote, buttons that run another command, `c|<command>`);
   a button turns its card into the answer, and a missing argument is asked

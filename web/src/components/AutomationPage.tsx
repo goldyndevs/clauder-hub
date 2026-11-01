@@ -1,4 +1,4 @@
-import { CalendarClock, Pencil, Play, Plus, RefreshCw, Trash2, Webhook, X } from "lucide-react";
+import { CalendarClock, CircleHelp, Pencil, Play, Plus, RefreshCw, Trash2, Webhook, X } from "lucide-react";
 import { api } from "../lib/api";
 import { projectApi } from "../lib/project";
 import { ago, when } from "../lib/format";
@@ -10,6 +10,7 @@ import { useConfirm } from "./Confirm";
 import { Button } from "./ui/Button";
 import { CopyButton } from "./ui/CopyId";
 import { Empty } from "./ui/Empty";
+import { Popover } from "./ui/Popover";
 import { StatusBadge } from "./ui/StatusBadge";
 
 /**
@@ -48,7 +49,7 @@ export function AutomationPage() {
               ))}
             </div>
           ) : (
-            <Empty variant="inline" title="No jobs yet. A cron job runs a prompt on a schedule; a webhook runs it when something calls its URL." />
+            <Empty variant="inline" title="No jobs yet. A cron job runs a prompt on a schedule; a manual / webhook job runs when you press Run, type /job in a channel, or something calls its URL." />
           )}
         </Section>
 
@@ -70,7 +71,11 @@ function JobRow({ job, onEdit }: { job: Job; onEdit: () => void }) {
         {job.kind === "cron" ? <CalendarClock size={14} className="shrink-0 text-muted-foreground" /> : <Webhook size={14} className="shrink-0 text-muted-foreground" />}
         <span className="min-w-0 truncate text-xs font-medium">{job.name}</span>
         {!job.enabled && <StatusBadge tone="off">disabled</StatusBadge>}
+        <StatusBadge tone="off" title={job.kind === "cron" ? "Runs on its schedule while the hub runs, and whenever it is run by hand" : "No schedule: runs when you press Run, type /job in a channel, or something calls its URL"}>
+          {job.kind === "cron" ? "cron" : "manual / webhook"}
+        </StatusBadge>
         <StatusBadge tone="off">{job.category || "no category"}</StatusBadge>
+        <HowToRun job={job} curl={curl} />
         <span className="ml-auto flex gap-1">
           <Button variant="ghost" size="icon" title="Run now" onClick={() =>
               void confirm({
@@ -134,6 +139,62 @@ function JobRow({ job, onEdit }: { job: Job; onEdit: () => void }) {
         )}
         <span>last run: {job.lastRunAt ? ago(job.lastRunAt) : "never"}</span>
       </div>
+    </div>
+  );
+}
+
+/** Every way this job can be started, so a job without a schedule is not a puzzle. */
+function HowToRun({ job, curl }: { job: Job; curl: string }) {
+  const local = `curl -X POST "http://127.0.0.1:${location.port || 80}${projectApi()}/jobs/${job.id}/run" -H "content-type: application/json" -d "{}"`;
+  return (
+    <Popover
+      align="start"
+      className="w-[30rem] max-w-[calc(100vw-1rem)] space-y-2.5 text-[11px]"
+      trigger={
+        <button className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground" title="Every way to start this job">
+          <CircleHelp size={11} /> How to run
+        </button>
+      }
+    >
+      <div className="text-xs font-semibold">How to run &lsquo;{job.name}&rsquo;</div>
+      {job.kind === "cron" ? (
+        <HowStep title="On its schedule">
+          <span className="font-mono">{job.schedule}</span>, next {job.nextRunAt ? when(job.nextRunAt) : "-"}, while the hub runs{job.enabled ? "" : " (disabled now)"}.
+        </HowStep>
+      ) : (
+        <HowStep title="No schedule">It runs only when started one of the ways below.</HowStep>
+      )}
+      <HowStep title="From this page">
+        Press <Play size={11} className="inline" /> Run. It asks first, then joins the project&rsquo;s queue (one run at a time).
+      </HowStep>
+      <HowStep title="From a channel">
+        <span className="font-mono">/job {job.name}</span> on Telegram (<span className="font-mono">!job</span> on Slack), or <span className="font-mono">/jobs</span> and pick it. It asks before it queues.
+      </HowStep>
+      {job.kind === "webhook" && (
+        <HowStep title="From another tool (webhook)">
+          <span className="flex items-center gap-1">
+            <span className="min-w-0 break-all font-mono">POST {projectApi()}/trigger/{job.id}</span>
+            <CopyButton text={curl} />
+          </span>
+          With the header <span className="font-mono">x-clauder-token</span> (the job&rsquo;s token, in the copied curl; renew it with <RefreshCw size={10} className="inline" /> on the row). The JSON body reaches the prompt as <span className="font-mono">{"{{payload}}"}</span> or <span className="font-mono">{"{{payload.field}}"}</span>.
+        </HowStep>
+      )}
+      <HowStep title="From an app on this machine">
+        <span className="flex items-center gap-1">
+          <span className="min-w-0 break-all font-mono">POST {projectApi()}/jobs/{job.id}/run</span>
+          <CopyButton text={local} />
+        </span>
+        No token: the hub only listens on 127.0.0.1. An optional <span className="font-mono">{"{\"payload\": {...}}"}</span> body fills the prompt as above.
+      </HowStep>
+    </Popover>
+  );
+}
+
+function HowStep({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="font-medium text-foreground">{title}</div>
+      <div className="text-muted-foreground">{children}</div>
     </div>
   );
 }

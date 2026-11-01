@@ -59,7 +59,7 @@ Clauder Hub runs the real `claude` you already use, in real terminals, and adds 
   <tr>
     <td>
       <h3>Answer from your phone</h3>
-      Telegram and Slack bots relay every question with inline buttons, and BotFather-style commands (<code>/new</code>, <code>/sessions</code>, <code>/summary</code>, <code>/stop</code>) drive sessions from chat. No public URL needed.
+      Telegram and Slack bots relay every question with inline buttons, and BotFather-style commands (<code>/new</code>, <code>/jobs</code>, <code>/sessions</code>, <code>/summary</code>, <code>/stop</code>) drive sessions from chat. No public URL needed.
     </td>
     <td>
       <picture>

@@ -252,6 +252,7 @@ Reply *install* to run it (project scope) and resume the session, or *skip* to c
 
 {{p}}new - start a session (with a prompt, or I ask for one)
 {{p}}run - queue an unattended run
+{{p}}jobs - the saved jobs, to run one ({{p}}job <name> runs one by name)
 {{p}}sessions - the sessions, to pick one
 {{p}}summary - what a session did
 {{p}}stop - stop a running session
@@ -306,7 +307,7 @@ Reply to this message to talk to the session. Its questions come here too.`,
 {{p}}projects - the projects, to pick one
 {{p}}use <project> - work on a project
 {{p}}addproject <words> - add a project: describe it, I find the folder
-Then, on that project: {{p}}new, {{p}}run, {{p}}sessions, {{p}}summary, {{p}}stop, {{p}}queue, {{p}}cancel.
+Then, on that project: {{p}}new, {{p}}run, {{p}}jobs, {{p}}sessions, {{p}}summary, {{p}}stop, {{p}}queue, {{p}}cancel.
 
 Working on: {{current}}`,
   },
@@ -325,6 +326,14 @@ Working on: {{current}}`,
     description: "Sent when no project-looking folder on the machine fits what {{p}}addproject was told; the next message is another try.",
     placeholders: ["request", "p"],
     text: "I found no project folder that looks like \"{{request}}\". Describe it another way (its name, what it does), or send its full path. Or {{p}}cancel.",
+  },
+  {
+    key: "channel.jobConfirm",
+    label: "Channel command: confirming a job run",
+    audience: "channel",
+    description: "Asked before a saved job is queued from the channel ({{p}}job, or a button from {{p}}jobs).",
+    placeholders: ["job", "prompt"],
+    text: "Run {{job}} now? It joins the queue as an unattended run; its questions and its result come here.\n\n{{prompt}}",
   },
   {
     key: "channel.stopConfirm",

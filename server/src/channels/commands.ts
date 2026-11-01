@@ -1,6 +1,6 @@
 import { bindProject, currentProject } from "../context.js";
 import { db, now } from "../db.js";
-import { cancelRun, enqueue, listRuns } from "../jobs.js";
+import { cancelRun, enqueue, getJob, listJobs, listRuns, type Job } from "../jobs.js";
 import { renderPrompt } from "../prompts.js";
 import { askSmallModel, jsonIn, pickNumbers } from "../smallModel.js";
 import { listSessions, startSession, type SessionView } from "../sessions.js";
@@ -50,7 +50,7 @@ export function isCommand(text: string): boolean {
   return COMMAND.test(text.trim());
 }
 
-const HUB_COMMANDS = new Set(["start", "help", "new", "run", "cancel", "leave", "sessions", "session", "summary", "stop", "stop!", "queue", "cancelrun"]);
+const HUB_COMMANDS = new Set(["start", "help", "new", "run", "jobs", "job", "job!", "cancel", "leave", "sessions", "session", "summary", "stop", "stop!", "queue", "cancelrun"]);
 
 /** One of the hub's own commands; any other "/word" (Claude's /compact, /clear...) is for the picked session. */
 export function isHubCommand(text: string): boolean {
@@ -205,6 +205,27 @@ function queueFromChannel(prompt: string): ChannelAnswer {
   return { title: "🗂 Run queued", lines: [renderPrompt("channel.queued", { position: String(position) })], buttons: [[{ label: "🗂 Queue", command: "queue" }]] };
 }
 
+/** A job by id, else by name: exact, then the only one containing what was typed (case ignored). */
+function findJob(arg: string): Job | null {
+  const wanted = arg.trim().toLowerCase();
+  if (!wanted) return null;
+  const jobs = listJobs();
+  const exact = getJob(arg.trim()) ?? jobs.find((job) => job.name.toLowerCase() === wanted);
+  if (exact) return exact;
+  const matches = jobs.filter((job) => job.name.toLowerCase().includes(wanted));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/** The jobs as buttons; pressing one asks before it queues (a job starts an unattended run). */
+function jobPicker(title: string, jobs: Job[], empty: string): ChannelAnswer {
+  if (!jobs.length) return empty;
+  return {
+    title,
+    lines: jobs.slice(0, 15).map((job, index) => `${index + 1}. ${job.name} · ${job.kind === "cron" ? `cron ${job.schedule}` : "manual / webhook"}${job.enabled ? "" : " · disabled"}`),
+    buttons: jobs.slice(0, 15).map((job, index) => [{ label: short(`▶️ ${index + 1}. ${job.name}`, 60), command: `job ${job.id}` }]),
+  };
+}
+
 function queueCard(): ChannelAnswer {
   const runs = listRuns(50).filter((run) => run.status === "queued" || run.status === "running");
   if (!runs.length) return "The queue is empty.";
@@ -265,6 +286,8 @@ async function sessionGuess(channelId: string, from: string, action: string, req
 const COMMAND_GUIDE = [
   "new <what the session should do> - start a session",
   "run <what to do> - queue an unattended run",
+  "jobs - list the saved jobs, to run one",
+  "job <name> - run a saved job now (asks first)",
   "sessions - list the sessions",
   "session <number> - pick a session, to talk to it",
   "summary <number> - what a session did",
@@ -302,7 +325,7 @@ export async function interpret(channelId: string, from: string, text: string, o
   return suggestCard(channelId, from, "🤔 Did you mean?", choices);
 }
 
-const GUESSABLE = new Set(["new", "run", "sessions", "session", "summary", "stop", "queue", "help"]);
+const GUESSABLE = new Set(["new", "run", "jobs", "job", "sessions", "session", "summary", "stop", "queue", "help"]);
 
 /** Runs a typed command ("/new fix the build") or a pressed button ("summary <id>"). */
 export async function runCommand(channelId: string, input: string, from: string, options: CommandOptions = {}): Promise<ChannelAnswer> {
@@ -337,6 +360,32 @@ export async function runCommand(channelId: string, input: string, from: string,
       if (arg) return name === "new" ? startFromChannel(channelId, arg, from, options) : queueFromChannel(arg);
       awaiting.set(key, name);
       return { title: name === "new" ? "▶️ New session" : "🗂 New run", lines: [renderPrompt(name === "new" ? "channel.askNew" : "channel.askRun", { p })], buttons: [[{ label: "Cancel", command: "cancel" }]] };
+    case "jobs":
+      return jobPicker("⚙️ Jobs: pick one to run", listJobs(), "No jobs yet. Create one on the Automation page.");
+    case "job": {
+      if (!arg) return jobPicker("⚙️ Run which job?", listJobs(), "No jobs yet. Create one on the Automation page.");
+      const job = findJob(arg);
+      if (!job) {
+        const like = listJobs().filter((item) => item.name.toLowerCase().includes(arg.toLowerCase()));
+        return jobPicker(`🤔 Which job did you mean?`, like.length ? like : listJobs(), `No job like "${short(arg, 60)}". ${p}jobs lists them.`);
+      }
+      return {
+        title: "⚙️ Run the job?",
+        lines: [renderPrompt("channel.jobConfirm", { job: job.name, prompt: short(flat(job.prompt), 300) })],
+        buttons: [
+          [
+            { label: "Yes, run it", command: `job! ${job.id}`, tone: "primary" },
+            { label: "No", command: "cancel" },
+          ],
+        ],
+      };
+    }
+    case "job!": {
+      const job = getJob(arg);
+      if (!job) return `That job is gone. ${p}jobs lists them.`;
+      const { position } = enqueue({ job, source: "manual" });
+      return { title: `🗂 ${job.name} queued`, lines: [renderPrompt("channel.queued", { position: String(position) })], buttons: [[{ label: "🗂 Queue", command: "queue" }]] };
+    }
     case "cancel":
       suggested.delete(suggestKey(channelId, from));
       // The question was already dropped above; cancel also lets go of the picked session.
@@ -406,6 +455,7 @@ export const GLOBAL_COMMAND_MENU = [
   { command: "addproject", description: "Add a project: describe it, I find it" },
   { command: "new", description: "Start a session in the picked project" },
   { command: "run", description: "Queue a run in the picked project" },
+  { command: "jobs", description: "The picked project's jobs, to run one" },
   { command: "sessions", description: "The picked project's sessions" },
   { command: "summary", description: "What a session did" },
   { command: "stop", description: "Stop a running session" },
@@ -418,6 +468,7 @@ export const GLOBAL_COMMAND_MENU = [
 export const COMMAND_MENU = [
   { command: "new", description: "Start a session" },
   { command: "run", description: "Queue an unattended run" },
+  { command: "jobs", description: "Run a saved job" },
   { command: "sessions", description: "Pick a session" },
   { command: "summary", description: "What a session did" },
   { command: "stop", description: "Stop a running session" },
