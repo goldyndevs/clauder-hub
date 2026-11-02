@@ -57,7 +57,13 @@ export function bumpDoneAttempts(id: string): number {
 export function renameSession(from: string, to: string): void {
   if (from === to) return;
   db.transaction(() => {
-    if (!getSessionRow(to)) db.prepare("UPDATE sessions SET id = ? WHERE id = ?").run(to, from);
+    // The terminal carries on as the new id (after /clear, say); the old conversation stays the hub's, ended.
+    const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(from) as Record<string, unknown> | undefined;
+    if (row && !getSessionRow(to)) {
+      const columns = Object.keys(row);
+      db.prepare(`INSERT INTO sessions (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).run(...columns.map((column) => (column === "id" ? to : row[column])));
+      db.prepare("UPDATE sessions SET status = 'exited' WHERE id = ? AND status IN ('running', 'waiting')").run(from);
+    }
     db.prepare("UPDATE interactions SET session_id = ? WHERE session_id = ?").run(to, from);
     db.prepare("UPDATE runs SET session_id = ? WHERE session_id = ?").run(to, from);
     db.prepare("UPDATE channel_threads SET session_id = ? WHERE session_id = ?").run(to, from);
@@ -326,6 +332,8 @@ export function listSessions(): SessionView[] {
 
   for (const summary of listTranscripts()) {
     seen.add(summary.id);
+    // Nothing said in it yet: the fresh conversation /clear opens. Its terminal shows it once a prompt goes in.
+    if (!summary.turns && !rows.has(summary.id) && !terminals.has(summary.id)) continue;
     views.push(view(summary.id, summary));
   }
   // Started a moment ago: the terminal is up but Claude has not written a line yet.

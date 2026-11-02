@@ -19,6 +19,7 @@ import { Button } from "./ui/Button";
 import { Empty } from "./ui/Empty";
 import { ClaudeBanner } from "./ClaudeBanner";
 import { Tooltip } from "./ui/Tooltip";
+import { LivePanel, useLivePanel } from "./LivePanel";
 
 /** #/global's pages: they reuse the project page names, so the route reads #/global/inbox. */
 const GLOBAL_NAV: Array<{ page: Page; label: string; icon: typeof Inbox }> = [
@@ -410,6 +411,8 @@ const COLLAPSED_KEY = "clauder-hub:global-sidebar-collapsed";
 export function GlobalShell() {
   const view = useStore((state) => state.view);
   const left = usePersistentWidth("clauder-hub:sidebar-width", 280, { min: 220, max: 480 });
+  const right = usePersistentWidth("clauder-hub:live-panel-width", 260, { min: 200, max: 420 });
+  const livePanel = useLivePanel((state) => state.open);
   const wide = useMediaQuery("(min-width: 768px)");
   const [drawer, setDrawer] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -476,6 +479,8 @@ export function GlobalShell() {
         <ClaudeBanner />
         <div className="min-h-0 flex-1">{content}</div>
       </main>
+      {wide && livePanel && <ResizeHandle onDrag={(delta) => right.resizeBy(-delta)} onReset={right.reset} />}
+      {wide && livePanel && <LivePanel width={right.width} />}
     </div>
   );
 }

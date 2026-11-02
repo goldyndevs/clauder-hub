@@ -7,6 +7,7 @@ import type {
   Folders,
   GlobalInboxItem,
   GlobalProject,
+  LiveProject,
   Health,
   ProjectInfo,
   Interaction,
@@ -80,6 +81,10 @@ export const api = {
   // #/global: every project at once. Answers go to the project an interaction is in, whichever is open.
   globalOverview: () => hubRequest<GlobalProject[]>("/global/overview"),
   globalInbox: () => hubRequest<GlobalInboxItem[]>("/global/inbox"),
+  globalLive: () => hubRequest<LiveProject[]>("/global/live"),
+  /** A plain session in any project, not only the open one (the live panel). */
+  startSessionIn: (projectId: string, size: TerminalSize) =>
+    call<{ sessionId: string; terminalId: string }>(`/api/p/${encodeURIComponent(projectId)}/sessions`, { method: "POST", body: JSON.stringify(size) }),
   setMuted: (projectId: string, muted: boolean) => hubRequest(`/global/muted/${encodeURIComponent(projectId)}`, { method: "PUT", body: JSON.stringify({ muted }) }),
   answerIn: (projectId: string, id: string, answer: string) =>
     hubRequest<Interaction>(`/p/${encodeURIComponent(projectId)}/interactions/${id}/answer`, { method: "POST", body: JSON.stringify({ answer }) }),
@@ -92,6 +97,8 @@ export const api = {
   dismissIn: (projectId: string, id: string) => hubRequest<Interaction>(`/p/${encodeURIComponent(projectId)}/interactions/${id}/dismiss`, { method: "POST" }),
 
   sessions: () => request<Session[]>("/sessions"),
+  /** Another project's sessions, read before switching to it. */
+  sessionsIn: (projectId: string) => call<Session[]>(`/api/p/${encodeURIComponent(projectId)}/sessions`),
   session: (id: string) => request<SessionDetail>(`/sessions/${id}`),
   startSession: (body: { prompt?: string; category?: string; name?: string; permissionMode?: string } & TerminalSize) =>
     post<{ sessionId: string; terminalId: string }>("/sessions", body),

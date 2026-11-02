@@ -10,6 +10,7 @@ import { Logo } from "./Logo";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Modal } from "./ui/Modal";
+import { LivePanelToggle } from "./LivePanel";
 
 /**
  * The folder picker: the hub runs on this machine, so it lists folders there.
@@ -154,6 +155,7 @@ export function TitleLink() {
       </button>
       {version && <span className="text-[10px] font-normal leading-tight text-muted-foreground/70">v{version}</span>}
       <PausedBell />
+      <LivePanelToggle />
     </span>
   );
 }

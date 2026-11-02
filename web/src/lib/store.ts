@@ -5,6 +5,31 @@ import { GLOBAL_ID, setCurrentProject } from "./project";
 import { switchProjectStores } from "./projectStores";
 import type { Health, Interaction, Session } from "./types";
 
+/**
+ * The session a project switch landed on, when it is not running: shown with
+ * a Resume button instead of being resumed, since nobody asked for it.
+ */
+let landedOn: string | null = null;
+export function takeLanding(sessionId: string): boolean {
+  // Read, not consumed (React may build the view twice); going anywhere by hand clears it.
+  return landedOn === sessionId;
+}
+
+/**
+ * Where switching to a project lands: a live session waiting on you, else a
+ * live one running, else the latest done one, else the latest session (hub
+ * tasks aside); the project's overview only when it has none.
+ */
+function landingSession(sessions: Session[]): Session | null {
+  const latest = (list: Session[]) => [...list].sort((a, b) => (b.lastAt ?? b.startedAt ?? "").localeCompare(a.lastAt ?? a.startedAt ?? ""))[0] ?? null;
+  return (
+    latest(sessions.filter((session) => session.live && session.status === "waiting")) ??
+    latest(sessions.filter((session) => session.live && session.status === "running")) ??
+    latest(sessions.filter((session) => session.status === "done")) ??
+    latest(sessions.filter((session) => !session.purpose))
+  );
+}
+
 export type Topic = "sessions" | "transcript" | "interactions" | "runs" | "jobs" | "mcp" | "channels" | "files" | "projects";
 
 export const PAGES = [
@@ -47,6 +72,8 @@ interface State {
   go: (view: View) => void;
   /** Shows a project, or the home page with null. */
   openProject: (id: string | null) => void;
+  /** Shows a session of any project, switching to it first when it is another. */
+  openSessionIn: (projectId: string, sessionId: string) => void;
   refreshSessions: () => Promise<void>;
   refreshOpen: () => Promise<void>;
   notify: (text: string, tone?: "error" | "info") => void;
@@ -182,15 +209,35 @@ export const useStore = create<State>((set, get) => {
     },
 
     go: (view) => {
+      landedOn = null;
       window.location.hash = hashOf(get().projectId, view, get().windowed).slice(1);
       set({ view });
     },
 
     openProject: (id) => {
-      const hash = hashOf(id, { kind: "page", page: "overview" }, false);
-      // The same hash fires no hashchange (a project opened again right after a failed open).
-      if (window.location.hash === hash && id !== get().projectId) void enter(id);
-      window.location.hash = hash.slice(1);
+      const show = (view: View) => {
+        const hash = hashOf(id, view, false);
+        // The same hash fires no hashchange (a project opened again right after a failed open).
+        if (window.location.hash === hash && id !== get().projectId) void enter(id);
+        window.location.hash = hash.slice(1);
+      };
+      if (!id || id === GLOBAL_ID || id === get().projectId) return show({ kind: "page", page: "overview" });
+      void api.sessionsIn(id).then(
+        (sessions) => {
+          const target = landingSession(sessions);
+          if (!target) return show({ kind: "page", page: "overview" });
+          landedOn = target.live ? null : target.id;
+          show({ kind: "session", id: target.id });
+        },
+        // An unreadable project still opens; its overview says what is wrong.
+        () => show({ kind: "page", page: "overview" }),
+      );
+    },
+
+    openSessionIn: (projectId, sessionId) => {
+      landedOn = null;
+      if (projectId === get().projectId) return get().go({ kind: "session", id: sessionId });
+      window.location.hash = hashOf(projectId, { kind: "session", id: sessionId }, false).slice(1);
     },
 
     refreshSessions: async () => {

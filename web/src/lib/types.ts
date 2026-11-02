@@ -278,6 +278,23 @@ export interface ProjectInfo {
   waiting: number;
 }
 
+/** A session as the live panel lists it. */
+export interface LiveSession {
+  id: string;
+  title: string;
+  status: Session["status"];
+  openInteractions: number;
+  lastAt: string | null;
+}
+
+/** A project with a live session, for the live panel: those, and its latest ended ones to resume. */
+export interface LiveProject {
+  id: string;
+  name: string;
+  live: LiveSession[];
+  recent: LiveSession[];
+}
+
 /** One project's card on #/global. */
 export interface GlobalProject {
   id: string;

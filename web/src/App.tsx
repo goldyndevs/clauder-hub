@@ -10,6 +10,7 @@ import { HubPromptsPage } from "./components/HubPromptsPage";
 import { GlobalShell } from "./components/GlobalPage";
 import { GLOBAL_ID } from "./lib/project";
 import { InboxPage } from "./components/InboxPage";
+import { LivePanel, useLivePanel } from "./components/LivePanel";
 import { McpSuggestionsPage } from "./components/McpPage";
 import { OverviewPage } from "./components/OverviewPage";
 import { PresetsPage } from "./components/PresetsPage";
@@ -72,6 +73,8 @@ export default function App() {
   const { boot, view, toast, health, windowed, projectId } = useStore();
   const [error, setError] = useState<string | null>(null);
   const left = usePersistentWidth("clauder-hub:sidebar-width", 280, { min: 220, max: 480 });
+  const right = usePersistentWidth("clauder-hub:live-panel-width", 260, { min: 200, max: 420 });
+  const livePanel = useLivePanel((state) => state.open);
   // Below md the sidebar is a drawer over the page, opened from the top bar.
   const wide = useMediaQuery("(min-width: 768px)");
   const [drawer, setDrawer] = useState(false);
@@ -186,6 +189,9 @@ export default function App() {
           {/* {!windowed && <RunningDock />} */}
           <div className="min-h-0 flex-1">{content}</div>
         </main>
+        {/* Every project's live sessions, to switch between them. */}
+        {!windowed && wide && livePanel && <ResizeHandle onDrag={(delta) => right.resizeBy(-delta)} onReset={right.reset} />}
+        {!windowed && wide && livePanel && <LivePanel width={right.width} />}
 
         {(error || toast) && <Toast text={(error ?? toast?.text)!} failed={Boolean(error) || toast?.tone === "error"} />}
       </div>

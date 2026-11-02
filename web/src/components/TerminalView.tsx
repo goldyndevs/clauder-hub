@@ -32,14 +32,59 @@ function projectPath(link: string): string | null {
   return target && !target.startsWith("../") ? target : null;
 }
 
+/** An absolute path outside the project (a temp folder, say), without its :line:col; null for anything else. */
+function localPath(link: string): string | null {
+  if (projectPath(link)) return null;
+  const target = link.replace(/:\d+(?::\d+)?$/, "");
+  return /^([A-Za-z]:[\\/]|\/)/.test(target) ? target : null;
+}
+
 const seen = new Map<string, { at: number; exists: Promise<boolean> }>();
 /** Only a file that is there gets a link; asked once per half minute per path. */
-function fileExists(path: string): Promise<boolean> {
-  const hit = seen.get(path);
+function fileExists(link: string): Promise<boolean> {
+  const path = projectPath(link);
+  const local = path ? null : localPath(link);
+  const key = path ?? local;
+  if (!key) return Promise.resolve(false);
+  const hit = seen.get(key);
   if (hit && Date.now() - hit.at < 30_000) return hit.exists;
-  const exists = filesApi.stat(path).then((stat) => stat.exists, () => false);
-  seen.set(path, { at: Date.now(), exists });
+  const exists = (
+    path
+      ? filesApi.stat(path)
+      : fetch(`/api/local-file/stat?path=${encodeURIComponent(local!)}`).then((response) => response.json() as Promise<{ exists: boolean }>)
+  ).then((stat) => stat.exists, () => false);
+  seen.set(key, { at: Date.now(), exists });
   return exists;
+}
+
+/**
+ * The text a row is part of, with the cell of every character. Claude Code
+ * breaks a long line itself, ending a row at (or a cell short of) the last column and indenting
+ * the next one, so a long path runs over rows that the terminal does not
+ * know belong together: a full row joins the next without its indent. A row
+ * the terminal itself wrapped (after a resize reflows them) keeps that indent
+ * in it too, so it goes as well.
+ */
+function logicalLine(term: Terminal, row: number): { text: string; cells: Array<{ x: number; y: number }> } {
+  const buffer = term.buffer.active;
+  const textOf = (y: number) => buffer.getLine(y)?.translateToString(true) ?? "";
+  const joins = (y: number) => {
+    const next = buffer.getLine(y + 1);
+    return Boolean(next && (next.isWrapped || (textOf(y).length >= term.cols - 2 && /^ {1,4}\S/.test(textOf(y + 1)))));
+  };
+  let first = row;
+  while (first > 0 && joins(first - 1)) first -= 1;
+  let last = row;
+  while (last < buffer.length - 1 && joins(last)) last += 1;
+  let text = "";
+  const cells: Array<{ x: number; y: number }> = [];
+  for (let y = first; y <= last; y += 1) {
+    const line = textOf(y);
+    const skip = y > first ? (/^ {1,4}(?=\S)/.exec(line)?.[0].length ?? 0) : 0;
+    for (let x = skip; x < line.length; x += 1) cells.push({ x: x + 1, y: y + 1 });
+    text += line.slice(skip);
+  }
+  return { text, cells };
 }
 
 /**
@@ -64,10 +109,18 @@ function pathsIn(text: string): Array<{ index: number; text: string }> {
   return found;
 }
 
-/** Ctrl (Cmd on a Mac) and click, as in a desktop terminal: the file opens in the hub's editor; closing it comes back here. */
+/**
+ * Ctrl (Cmd on a Mac) and click, as in a desktop terminal: the file opens in the hub's editor; closing it comes back here.
+ * A file outside the project opens read only in a browser tab of its own (an image shows as one).
+ */
 function openLink(event: MouseEvent, link: string, terminalId: string): boolean {
   if (!event.ctrlKey && !event.metaKey) return false;
   const path = projectPath(link);
+  const local = path ? null : localPath(link);
+  if (local) {
+    window.open(`/api/local-file?path=${encodeURIComponent(local)}`, "_blank", "noopener");
+    return true;
+  }
   if (!path) return false;
   const { sessions, go } = useStore.getState();
   const session = sessions.find((item) => item.terminalId === terminalId);
@@ -118,15 +171,18 @@ export function TerminalView({ terminalId, onExit }: { terminalId: string; onExi
     // File paths printed as plain text; one inside a web address is the web link's.
     const pathLinks = term.registerLinkProvider({
       provideLinks: (y, callback) => {
-        const text = term.buffer.active.getLine(y - 1)?.translateToString(true) ?? "";
-        const candidates = pathsIn(text).filter((item) => projectPath(item.text));
+        const { text, cells } = logicalLine(term, y - 1);
+        // The paths on this row, a long one carried over from the row before or onto the next included.
+        const candidates = pathsIn(text).filter(
+          (item) => (projectPath(item.text) || localPath(item.text)) && cells.slice(item.index, item.index + item.text.length).some((cell) => cell.y === y),
+        );
         if (!candidates.length) return callback(undefined);
-        void Promise.all(candidates.map((item) => fileExists(projectPath(item.text)!))).then((exists) => {
+        void Promise.all(candidates.map((item) => fileExists(item.text))).then((exists) => {
           const links = candidates
             .filter((_, index) => exists[index])
             .map((item) => ({
               text: item.text,
-              range: { start: { x: item.index + 1, y }, end: { x: item.index + item.text.length, y } },
+              range: { start: cells[item.index], end: cells[item.index + item.text.length - 1] },
               activate: (event: MouseEvent, link: string) => void openLink(event, link, terminalId),
             }));
           callback(links.length ? links : undefined);

@@ -143,6 +143,35 @@ hubApi.get(
   }),
 );
 
+/**
+ * The projects with a live session, for the live panel beside every page:
+ * those sessions, and the latest ended ones to resume, in each.
+ */
+hubApi.get(
+  "/global/live",
+  wrap(() =>
+    acrossProjects((info) => {
+      const sessions = listSessions();
+      const pick = (session: (typeof sessions)[number]) => ({
+        id: session.id,
+        title: session.title,
+        status: session.status,
+        openInteractions: session.openInteractions,
+        lastAt: session.lastAt ?? null,
+      });
+      const live = sessions.filter((session) => session.live);
+      const recent = sessions
+        .filter((session) => !session.live && session.lastAt)
+        .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""))
+        .slice(0, 8);
+      return { id: info.id, name: info.name, live: live.map(pick), recent: recent.map(pick) };
+    })
+      .filter((project) => project.live.length)
+      // By name, so a group stays where it was when another project is opened.
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
+  ),
+);
+
 /** Everything waiting on a person, in every project, newest first; answered through each project's own API. */
 hubApi.get(
   "/global/inbox",
@@ -185,6 +214,32 @@ hubApi.get("/file-icons/:name.svg", (req, res) => {
   if (!file) return void res.status(404).end();
   // They change only with the package, so the browser keeps them.
   res.sendFile(file, { maxAge: "7d" });
+});
+
+/**
+ * A file outside every project that a session printed the path of (a
+ * screenshot in a temp folder, say), read only, for the terminal's Ctrl+click.
+ * Its bytes go only to the hub's own page or a tab opened from it: another
+ * site's <img> or <script> pointing here is turned away (Sec-Fetch-Site).
+ */
+const localFile = (value: unknown): string | null => {
+  const file = typeof value === "string" ? path.normalize(value) : "";
+  if (!path.isAbsolute(file) || (process.platform === "win32" && !/^[A-Za-z]:\\/.test(file))) return null;
+  try {
+    return fs.statSync(file).isFile() ? file : null;
+  } catch {
+    return null;
+  }
+};
+hubApi.get("/local-file/stat", wrap((req) => ({ exists: localFile(req.query.path) !== null })));
+hubApi.get("/local-file", (req, res) => {
+  const site = req.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return void res.status(403).end();
+  const file = localFile(req.query.path);
+  if (!file) return void res.status(404).json({ error: "No such file." });
+  res.setHeader("Content-Security-Policy", "sandbox");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.sendFile(file, { dotfiles: "allow", cacheControl: false });
 });
 
 hubApi.get("/stream", (req, res) => {
