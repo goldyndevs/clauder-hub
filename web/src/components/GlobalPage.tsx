@@ -44,9 +44,26 @@ function copyText(text: string, what: string): void {
   );
 }
 
-/** A project card's right-click menu: open it, quiet it, copy where it is, show it, take it off the hub. */
-function ProjectMenu({ project, x, y, onClose, remove, toggleMute }: { project: GlobalProject; x: number; y: number; onClose: () => void; remove: () => void; toggleMute: () => void }) {
+/** What the project menu needs to know of a project; muted and paused are unknown until the overview has loaded. */
+type MenuProject = Pick<GlobalProject, "id" | "name" | "root"> & Partial<Pick<GlobalProject, "muted" | "paused">>;
+
+/** A project's right-click menu, on its card and in the sidebar: open it, quiet it, copy where it is, show it, take it off the hub. */
+function ProjectMenu({ project, x, y, onClose }: { project: MenuProject; x: number; y: number; onClose: () => void }) {
   const openProject = useStore((state) => state.openProject);
+  const confirm = useConfirm();
+  const toggleMute = () =>
+    attempt(() => api.setMuted(project.id, !project.muted), project.muted ? `${project.name} is heard on the global channels again.` : `The global channels no longer hear from ${project.name}.`);
+  const remove = () =>
+    confirm({
+      title: `Remove ${project.name} from the hub?`,
+      description: "Its running sessions stop and its jobs no longer run. The folder and its saved settings stay.",
+      confirmLabel: "Remove",
+      tone: "destructive",
+      run: async () => {
+        await api.removeProject(project.id);
+        useStore.getState().notify(`Removed ${project.name}. Opening its folder again brings it back as it was.`);
+      },
+    });
   useEffect(() => {
     const close = () => onClose();
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
@@ -103,7 +120,7 @@ function ProjectMenu({ project, x, y, onClose, remove, toggleMute }: { project: 
         : item("Do not disturb", BellOff, () => void attempt(() => api.pauseNotificationsIn(project.id, true), `No channel hears from ${project.name} now.`), {
             hint: "Pauses every channel of this project, and the global ones for it; questions still wait in the inbox",
           })}
-      {item(project.muted ? "Hear on global channels" : "Mute on global channels", project.muted ? Radio : VolumeX, toggleMute, {
+      {item(project.muted ? "Hear on global channels" : "Mute on global channels", project.muted ? Radio : VolumeX, () => void toggleMute(), {
         hint: "Only the global channels; the project's own channels are not changed",
       })}
       <div className="my-1 border-t" />
@@ -111,7 +128,7 @@ function ProjectMenu({ project, x, y, onClose, remove, toggleMute }: { project: 
       {item("Copy Relative Path", Link, () => void relative(), { hint: "From your home folder, as ~/..." })}
       {item("Reveal in File Explorer", FolderOpen, () => void attempt(() => api.revealIn(project.id)))}
       <div className="my-1 border-t" />
-      {item("Remove from the hub", Trash2, remove, { danger: true, hint: "The folder and its saved settings stay" })}
+      {item("Remove from the hub", Trash2, () => void remove(), { danger: true, hint: "The folder and its saved settings stay" })}
     </div>
   );
 }
@@ -142,7 +159,7 @@ function ProjectCard({ project }: { project: GlobalProject }) {
         setMenu({ x: event.clientX, y: event.clientY });
       }}
     >
-      {menu && <ProjectMenu project={project} {...menu} onClose={() => setMenu(null)} remove={() => void remove()} toggleMute={() => void toggleMute()} />}
+      {menu && <ProjectMenu project={project} {...menu} onClose={() => setMenu(null)} />}
       <div className="flex items-start gap-2">
         <button onClick={() => openProject(project.id)} className="min-w-0 flex-1 text-left" title={project.root}>
           <div className="flex min-w-0 items-center gap-1.5">
@@ -238,7 +255,8 @@ function GlobalInbox() {
           ))}
         </div>
       ) : (
-        <Empty variant="inline" icon={Inbox} title={inbox.data ? "Nothing is waiting on you." : "Loading..."} />
+        // The same empty state as a project's inbox.
+        <Empty icon={Bell} title={inbox.data ? "Nothing is waiting on you." : "Loading..."} />
       )}
     </Scroll>
   );
@@ -255,6 +273,9 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
   const openProject = useStore((state) => state.openProject);
   const sessions = useStore((state) => state.sessions);
   const projects = useLive(() => api.projects(), ["projects"]);
+  // Muted and paused, for the projects' right-click menu.
+  const overview = useLive(() => api.globalOverview(), ["projects", "channels"]);
+  const [menu, setMenu] = useState<{ project: MenuProject; x: number; y: number } | null>(null);
   const [picking, setPicking] = useState(false);
   const inbox = useLive(() => api.globalInbox(), ["projects", "interactions"]);
   const waiting = inbox.data?.length ?? 0;
@@ -321,11 +342,18 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
               <Plus size={12} />
             </button>
           </div>
+          {menu && <ProjectMenu project={menu.project} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
           {(projects.data ?? []).map((project) => (
             <button
               key={project.id}
               disabled={!project.exists}
               onClick={() => openProject(project.id)}
+              // The same menu as the project's card on the home page.
+              onContextMenu={(event) => {
+                event.preventDefault();
+                const known = overview.data?.find((item) => item.id === project.id);
+                setMenu({ project: { id: project.id, name: project.name, root: project.root, muted: known?.muted, paused: known?.paused }, x: event.clientX, y: event.clientY });
+              }}
               title={project.root}
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
             >

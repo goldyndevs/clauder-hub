@@ -1,17 +1,21 @@
 import { CalendarClock, CircleHelp, Pencil, Play, Plus, RefreshCw, Square, StepForward, Trash2, Webhook, X } from "lucide-react";
+import { useState } from "react";
 import { api } from "../lib/api";
+import { cn } from "../lib/cn";
 import { projectApi } from "../lib/project";
 import { ago, when } from "../lib/format";
 import { attempt, useLive, useStore } from "../lib/store";
 import type { Job, Run } from "../lib/types";
 import { usePurpose } from "../lib/usePurpose";
-import { Section } from "./Charts";
 import { useConfirm } from "./Confirm";
 import { Button } from "./ui/Button";
 import { CopyButton } from "./ui/CopyId";
 import { Empty } from "./ui/Empty";
 import { Popover } from "./ui/Popover";
 import { StatusBadge } from "./ui/StatusBadge";
+
+type Tab = "jobs" | "queue";
+const TAB_KEY = "clauder-hub:automation-tab";
 
 /**
  * Cron jobs and webhooks, and the one queue they feed. Creating and changing
@@ -21,6 +25,22 @@ export function AutomationPage() {
   const jobs = useLive(() => api.jobs(), ["jobs"]);
   const runs = useLive(() => api.runs(), ["runs"]);
   const { starting, start } = usePurpose();
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      return localStorage.getItem(TAB_KEY) === "queue" ? "queue" : "jobs";
+    } catch {
+      return "jobs";
+    }
+  });
+  const chooseTab = (next: Tab) => {
+    setTab(next);
+    try {
+      localStorage.setItem(TAB_KEY, next);
+    } catch {
+      // Private windows and blocked site data: the tab just is not remembered.
+    }
+  };
+  const active = (runs.data ?? []).filter((run) => run.status === "queued" || run.status === "running").length;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -41,8 +61,38 @@ export function AutomationPage() {
           </div>
         </div>
 
-        <Section title="Jobs">
-          {jobs.data?.length ? (
+        {/* Two tabs, each with its count: the jobs, and the queue (what is waiting or running now). */}
+        <div className="no-scrollbar flex gap-1 overflow-x-auto border-b">
+          {(
+            [
+              ["jobs", "Jobs", jobs.data?.length ?? 0, "Every job of this project"],
+              ["queue", "Queue", active, "Runs waiting or running now; the list below also keeps the finished ones"],
+            ] as Array<[Tab, string, number, string]>
+          ).map(([key, label, count, hint]) => (
+            <button
+              key={key}
+              onClick={() => chooseTab(key)}
+              title={hint}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-xs transition-colors",
+                tab === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+              <span
+                className={cn(
+                  "grid h-4 min-w-[1rem] place-items-center rounded-full px-1 text-[10px] font-semibold leading-none tabular-nums",
+                  key === "queue" && count > 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {tab === "jobs" ? (
+          jobs.data?.length ? (
             <div className="divide-y rounded-md border">
               {jobs.data.map((job) => (
                 <JobRow key={job.id} job={job} onEdit={() => void start("edit-job", job.id)} />
@@ -50,12 +100,12 @@ export function AutomationPage() {
             </div>
           ) : (
             <Empty variant="inline" title="No jobs yet. A cron job runs a prompt on a schedule; a manual / webhook job runs when you press Run, type /job in a channel, or something calls its URL." />
-          )}
-        </Section>
-
-        <Section title="Queue">
-          {runs.data?.length ? <RunTable runs={runs.data} /> : <Empty variant="inline" title="Nothing has run yet." />}
-        </Section>
+          )
+        ) : runs.data?.length ? (
+          <RunTable runs={runs.data} />
+        ) : (
+          <Empty variant="inline" title="Nothing has run yet." />
+        )}
       </div>
     </div>
   );

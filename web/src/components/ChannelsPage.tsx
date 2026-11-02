@@ -106,7 +106,12 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
             title="Notifications"
             description={paused ? "Paused: no channel hears of anything; questions still wait in the inbox." : "For every channel below, this computer included."}
             action={
-              <div ref={master} className={cn("rounded-full transition-shadow", flash && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse")}>
+              <div
+                ref={master}
+                className={cn("flex items-center gap-2 rounded-full py-0.5 pl-2.5 pr-0.5 transition-shadow", flash && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse")}
+              >
+                {/* Says what the switch is doing, so its position needs no guessing. */}
+                <span className={cn("text-[11px] font-medium", paused ? "text-severity-warning" : "text-muted-foreground")}>{paused ? "Paused on every channel" : "On for every channel"}</span>
                 <Switch on={!paused} label={paused ? "Turn notifications back on" : "Pause notifications on every channel"} onToggle={() => void attempt(() => api.setNotificationsPaused(!paused))} />
               </div>
             }
@@ -214,6 +219,7 @@ function DeviceCard({ channel }: { channel: Channel | undefined }) {
           <Send size={13} />
         </Button>
       )}
+      <span className="text-[11px] font-medium text-muted-foreground">{on ? "On" : "Off"}</span>
       <Switch on={on} label={on ? "Stop notifying on this computer" : "Notify on this computer"} onToggle={() => void toggle()} />
     </div>
   );
