@@ -1,4 +1,5 @@
 import * as pty from "@lydell/node-pty";
+import headless from "@xterm/headless";
 import { nanoid } from "nanoid";
 import type { WebSocket } from "ws";
 import { bindProject, currentProject } from "./context.js";
@@ -29,6 +30,8 @@ export interface Terminal {
   lastOutputAt: number;
   cols: number;
   rows: number;
+  /** The screen as a terminal would show it now, kept on the hub, so a dialog is read from its real lines (watchdog.ts). */
+  screen: InstanceType<typeof headless.Terminal>;
   /** Stopped on purpose to be resumed at once (an MCP was installed), so its exit ends nothing. */
   restarting?: boolean;
   /** Closed by the hub because the task is done. */
@@ -94,12 +97,14 @@ export function spawnTerminal(input: { file: string; args: string[]; sessionId: 
     lastOutputAt: Date.now(),
     cols,
     rows,
+    screen: new headless.Terminal({ cols, rows, scrollback: 200, allowProposedApi: true }),
   };
   terminals.set(terminal.id, terminal);
 
   // The pty calls back from native code: each handler is put back in this terminal's project.
   child.onData(bindProject((data: string) => {
     terminal.backlog.push(data);
+    terminal.screen.write(data);
     terminal.backlogSize += data.length;
     terminal.lastOutputAt = Date.now();
     while (terminal.backlogSize > BACKLOG_LIMIT && terminal.backlog.length > 1) {
@@ -111,6 +116,7 @@ export function spawnTerminal(input: { file: string; args: string[]; sessionId: 
 
   child.onExit(bindProject(({ exitCode }: { exitCode: number }) => {
     terminals.delete(terminal.id);
+    terminal.screen.dispose();
     const frame = JSON.stringify({ type: "exit", code: exitCode });
     for (const client of terminal.clients) {
       if (client.readyState === client.OPEN) client.send(frame);
@@ -175,12 +181,28 @@ function resizeTerminal(terminal: Terminal, cols: number, rows: number): void {
   terminal.rows = rows;
   try {
     terminal.pty.resize(cols, rows);
+    terminal.screen.resize(cols, rows);
   } catch {
     // The process is on its way out.
   }
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The lines on the terminal's screen now (the alternate screen when Claude
+ * draws full screen), once everything it printed has been taken in.
+ */
+export function screenLines(terminal: Terminal): Promise<string[]> {
+  return new Promise((resolve) =>
+    terminal.screen.write("", () => {
+      const buffer = terminal.screen.buffer.active;
+      const lines: string[] = [];
+      for (let row = 0; row < terminal.screen.rows; row += 1) lines.push(buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? "");
+      resolve(lines);
+    }),
+  );
+}
 
 /** Raw keys, for answering a dialog: "1", "\x1b", "\r". */
 export async function pressKeys(terminal: Terminal, ...keys: string[]): Promise<void> {

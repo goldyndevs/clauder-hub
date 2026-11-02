@@ -1,7 +1,7 @@
 import { bindProject } from "./context.js";
 import { closeOpen, createInteraction, listInteractions } from "./interactions.js";
 import { getSessionRow, setSessionStatus } from "./sessions.js";
-import { allTerminals, listTerminals, pressKeys, type Terminal } from "./terminals.js";
+import { allTerminals, listTerminals, pressKeys, screenLines, type Terminal } from "./terminals.js";
 
 /**
  * What a session's hooks cannot report, read from its screen instead.
@@ -20,30 +20,16 @@ import { allTerminals, listTerminals, pressKeys, type Terminal } from "./termina
 const TRUST_MARKERS = ["doyoutrustthefilesinthisfolder", "isthisaprojectyoucreatedoroneyoutrust", "yes,itrustthisfolder"];
 /** Quiet long enough to call a run stuck: well past any pause between Claude's own redraws. */
 const STALL_MS = Number(process.env.CLAUDER_HUB_STALL_MS) || 8 * 60_000;
-const SCREEN_TAIL = 8000;
-
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\x1b[=>78]/g;
-
-/** The end of what the terminal printed, without escape codes. */
-function screenTail(terminal: Terminal): string {
-  let text = "";
-  for (let index = terminal.backlog.length - 1; index >= 0 && text.length < SCREEN_TAIL * 2; index -= 1) text = terminal.backlog[index] + text;
-  return text.slice(-SCREEN_TAIL * 2).replace(ANSI, "").slice(-SCREEN_TAIL);
-}
-
-/** The TUI places words with cursor moves, so spacing is unreliable: compare without any. */
+/** Compared without spaces or case: the dialog's wording and padding vary a little between versions. */
 const squeeze = (text: string) => text.toLowerCase().replace(/\s+/g, "");
 /**
- * Showing now, not merely printed earlier: the dialog's text is there and the
- * last thing printed is still the dialog (its options or "Enter to confirm"),
- * so a dialog just answered and being replaced does not count again.
+ * On the screen now, read from the hub's own copy of it (terminals.ts), so a
+ * dialog printed earlier and since replaced does not count: its question and
+ * one of its options are both showing.
  */
-const showsTrustDialog = (screen: string) => {
-  const flat = squeeze(screen.slice(-3000));
-  if (!TRUST_MARKERS.some((marker) => flat.includes(marker))) return false;
-  const end = Math.max(flat.lastIndexOf("entertoconfirm"), flat.lastIndexOf("itrustthisfolder"), flat.lastIndexOf("no,exit"));
-  return end >= 0 && flat.length - end < 120;
+const showsTrustDialog = (lines: string[]) => {
+  const flat = squeeze(lines.join("\n"));
+  return TRUST_MARKERS.some((marker) => flat.includes(marker)) && (flat.includes("itrustthisfolder") || flat.includes("no,exit"));
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,22 +37,24 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * Answers the trust dialog. Its options carry no numbers and their order and
  * default differ between Claude Code versions ("No, exit" first and selected
- * in some), so the selection is read off the screen: arrows move it onto the
- * wanted option, then Enter confirms. Declining is Escape, which exits.
+ * in some), so the selection is read off the screen's lines: the line with
+ * the ❯ is the selected one, arrows move it onto "Yes, I trust", then Enter
+ * confirms. Declining is Escape, which exits.
  */
 export async function answerTrust(terminal: Terminal, trust: boolean): Promise<void> {
   if (!trust) return pressKeys(terminal, "\x1b");
-  for (let step = 0; step < 4; step += 1) {
-    const flat = squeeze(screenTail(terminal).slice(-1500));
-    const cursor = flat.lastIndexOf("❯");
-    const after = cursor >= 0 ? flat.slice(cursor + 1) : "";
-    if (after.startsWith("yes")) return pressKeys(terminal, "\r");
-    // Below the cursor means down, else up.
-    const yesAt = flat.lastIndexOf("yes,itrust");
-    await pressKeys(terminal, yesAt > cursor ? "\x1b[B" : "\x1b[A");
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const lines = (await screenLines(terminal)).map(squeeze);
+    const yes = lines.findIndex((line) => line.includes("yes,itrust"));
+    const selected = lines.findIndex((line) => line.includes("❯"));
+    if (yes === -1 || selected === -1) throw new Error("Could not find the trust dialog on the screen; answer it in the terminal.");
+    if (yes === selected) return pressKeys(terminal, "\r");
+    // One arrow per line between them, each its own key press: down when "Yes" is below the selection.
+    const arrow = yes > selected ? "\x1b[B" : "\x1b[A";
+    await pressKeys(terminal, ...Array<string>(Math.abs(yes - selected)).fill(arrow));
     await sleep(300);
   }
-  throw new Error("Could not find the trust option on the screen.");
+  throw new Error('Could not move the selection onto "Yes, I trust this folder"; answer it in the terminal.');
 }
 
 /** The last lines worth reading, for a person deciding what a stuck run needs. */
@@ -78,11 +66,11 @@ function lastLines(screen: string): string {
 /** The quiet spell each terminal was last reported for, so it is reported once. */
 const reported = new Map<string, number>();
 
-function check(): void {
+async function check(): Promise<void> {
   for (const terminal of listTerminals()) {
     if (terminal.finished || terminal.restarting) continue;
     const open = listInteractions({ sessionId: terminal.sessionId, status: "open" });
-    const screen = screenTail(terminal);
+    const screen = await screenLines(terminal);
     const trustOpen = open.find((item) => item.data?.trust);
 
     if (showsTrustDialog(screen)) {
@@ -121,7 +109,7 @@ function check(): void {
       sessionId: terminal.sessionId,
       kind: "turn",
       title: "This run looks stuck",
-      body: `Nothing has changed on its screen for ${Math.round(quietFor / 60_000)} minutes. It may be waiting on a dialog, or it stopped without reporting done. Reply to type into it, or stop it.\n\n${lastLines(screen)}`,
+      body: `Nothing has changed on its screen for ${Math.round(quietFor / 60_000)} minutes. It may be waiting on a dialog, or it stopped without reporting done. Reply to type into it, or stop it.\n\n${lastLines(screen.join("\n"))}`,
       data: { stalled: true },
     });
   }
@@ -131,12 +119,13 @@ function check(): void {
 
 /** Watches the current project's terminals; returns the stop function. */
 export function startWatchdog(intervalMs = 3000): () => void {
+  let busy = false;
   const timer = setInterval(bindProject(() => {
-    try {
-      check();
-    } catch (error) {
-      console.error("[watchdog]", (error as Error).message);
-    }
+    if (busy) return;
+    busy = true;
+    check()
+      .catch((error) => console.error("[watchdog]", (error as Error).message))
+      .finally(() => (busy = false));
   }), intervalMs);
   return () => clearInterval(timer);
 }
