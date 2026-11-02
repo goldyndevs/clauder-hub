@@ -61,12 +61,12 @@ export function AutomationPage() {
           </div>
         </div>
 
-        {/* Two tabs, each with its count: the jobs, and the queue (what is waiting or running now). */}
+        {/* Two tabs, each counting the rows it lists; the queue's count is coloured while a run waits or runs. */}
         <div className="no-scrollbar flex gap-1 overflow-x-auto border-b">
           {(
             [
               ["jobs", "Jobs", jobs.data?.length ?? 0, "Every job of this project"],
-              ["queue", "Queue", active, "Runs waiting or running now; the list below also keeps the finished ones"],
+              ["queue", "Queue", runs.data?.length ?? 0, active ? `${active} waiting or running now` : "Nothing waiting or running now"],
             ] as Array<[Tab, string, number, string]>
           ).map(([key, label, count, hint]) => (
             <button
@@ -82,7 +82,7 @@ export function AutomationPage() {
               <span
                 className={cn(
                   "grid h-4 min-w-[1rem] place-items-center rounded-full px-1 text-[10px] font-semibold leading-none tabular-nums",
-                  key === "queue" && count > 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                  key === "queue" && active > 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
                 )}
               >
                 {count}

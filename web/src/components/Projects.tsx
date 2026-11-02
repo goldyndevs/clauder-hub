@@ -191,7 +191,7 @@ export function ProjectSwitcher() {
       title="Back to the global home: every project"
     >
       Change
-      {waitingElsewhere > 0 && <span className="grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-severity-warning px-1 text-[9px] font-semibold text-background">{waitingElsewhere}</span>}
+      {waitingElsewhere > 0 && <span className="grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-severity-warning px-1 text-[9px] font-semibold leading-none tabular-nums text-background">{waitingElsewhere}</span>}
     </button>
   );
 }
