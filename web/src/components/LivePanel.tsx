@@ -1,4 +1,4 @@
-import { History, PanelRight, PanelRightClose, Plus } from "lucide-react";
+import { ArrowRight, History, PanelRight, PanelRightClose, Pencil, Plus, X, XCircle } from "lucide-react";
 import { useState } from "react";
 import { create } from "zustand";
 import { api } from "../lib/api";
@@ -6,6 +6,10 @@ import { cn } from "../lib/cn";
 import { ago } from "../lib/format";
 import { attempt, useLive, useStore } from "../lib/store";
 import type { LiveProject, LiveSession } from "../lib/types";
+import { useConfirm } from "./Confirm";
+import { ProjectMenu } from "./GlobalPage";
+import { focusNeighbourTerminal, useSessionActions } from "./SessionActions";
+import { TabMenu } from "./TerminalTabs";
 import { Button } from "./ui/Button";
 import { Popover } from "./ui/Popover";
 
@@ -68,7 +72,7 @@ function Dot({ status }: { status: LiveSession["status"] }) {
  */
 export function LivePanel({ width }: { width: number }) {
   const toggle = useLivePanel((state) => state.toggle);
-  const live = useLive(() => api.globalLive(), ["projects", "sessions", "interactions"]);
+  const live = useLive(() => api.globalLive(), ["projects", "sessions", "interactions", "channels"]);
   const projects = live.data ?? [];
   const count = projects.reduce((total, project) => total + project.live.length, 0);
 
@@ -99,7 +103,25 @@ function ProjectGroup({ project }: { project: LiveProject }) {
   const openSessionIn = useStore((state) => state.openSessionIn);
   const [starting, setStarting] = useState(false);
   const [resumeOpen, setResumeOpen] = useState(false);
+  const [menu, setMenu] = useState<{ session: LiveSession; x: number; y: number } | null>(null);
+  const [projectMenu, setProjectMenu] = useState<{ x: number; y: number } | null>(null);
+  const actions = useSessionActions();
+  const confirm = useConfirm();
   const here = projectId === project.id;
+
+  // The terminal tabs' menu, for this project's live sessions.
+  const stopMany = (targets: LiveSession[], all: boolean) =>
+    confirm({
+      title: `Stop ${all ? "all " : ""}${targets.length} ${all ? "running" : "other"} terminal${targets.length > 1 ? "s" : ""} in ${project.name}?`,
+      description: "Their conversations are kept for a later resume.",
+      body: <div className="space-y-0.5 text-[11px] text-muted-foreground">{targets.map((session) => <div key={session.id} className="truncate">{session.title}</div>)}</div>,
+      confirmLabel: all ? "Stop all" : "Stop others",
+      tone: "destructive",
+      run: async () => {
+        await Promise.all(targets.map((session) => api.killSession(session.id, here ? undefined : project.id)));
+        if (here) focusNeighbourTerminal(targets.map((session) => session.id));
+      },
+    });
 
   // Sized to the area the terminal will fill, so the TUI does not redraw at another width when the page attaches.
   const newSession = async () => {
@@ -117,7 +139,15 @@ function ProjectGroup({ project }: { project: LiveProject }) {
 
   return (
     <div className="px-1.5 py-1">
-      <div className="group flex items-center gap-1 px-1.5 py-1">
+      {projectMenu && <ProjectMenu project={project} x={projectMenu.x} y={projectMenu.y} onClose={() => setProjectMenu(null)} />}
+      {/* The project's own menu, as on its card on the global page. */}
+      <div
+        className="group flex items-center gap-1 px-1.5 py-1"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setProjectMenu({ x: event.clientX, y: event.clientY });
+        }}
+      >
         <button
           onClick={() => openProject(project.id)}
           title={`Open ${project.name}`}
@@ -162,6 +192,10 @@ function ProjectGroup({ project }: { project: LiveProject }) {
           <button
             key={session.id}
             onClick={() => openSessionIn(project.id, session.id)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenu({ session, x: event.clientX, y: event.clientY });
+            }}
             title={session.title}
             className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs", current ? "bg-primary/15 text-foreground" : "hover:bg-muted")}
           >
@@ -175,6 +209,20 @@ function ProjectGroup({ project }: { project: LiveProject }) {
           </button>
         );
       })}
+      {menu && (
+        <TabMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={[
+            ["Open", ArrowRight, () => openSessionIn(project.id, menu.session.id)],
+            ["Rename", Pencil, () => void actions.rename(menu.session, project.id)],
+            ["Close", X, () => void actions.stop(menu.session, project.id), true],
+            ["Close Others", XCircle, () => void stopMany(project.live.filter((session) => session.id !== menu.session.id), false), false, project.live.length < 2],
+            ["Close All", XCircle, () => void stopMany(project.live, true)],
+          ]}
+        />
+      )}
     </div>
   );
 }

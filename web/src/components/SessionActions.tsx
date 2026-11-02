@@ -48,7 +48,10 @@ export function useSessionActions() {
   const name = useRef("");
   const clearTemp = useRef(true);
 
-  const rename = (session: Session) => {
+  /** `projectId` names another project's session (the live panel); the open project's otherwise. */
+  const here = (projectId?: string) => !projectId || projectId === useStore.getState().projectId;
+
+  const rename = (session: Pick<Session, "id" | "title">, projectId?: string) => {
     name.current = session.title;
     return confirm({
       title: "Rename session",
@@ -64,8 +67,8 @@ export function useSessionActions() {
       ),
       confirmLabel: "Rename",
       run: async () => {
-        await api.renameSession(session.id, name.current);
-        await useStore.getState().refreshSessions();
+        await api.renameSession(session.id, name.current, here(projectId) ? undefined : projectId);
+        if (here(projectId)) await useStore.getState().refreshSessions();
       },
     });
   };
@@ -122,15 +125,15 @@ export function useSessionActions() {
     return deleted;
   };
 
-  const stop = (session: Session) =>
+  const stop = (session: Pick<Session, "id" | "title">, projectId?: string) =>
     confirm({
       title: `Stop "${session.title}"?`,
       description: "The conversation is kept for a later resume.",
       confirmLabel: "Stop",
       tone: "destructive",
       run: async () => {
-        await api.killSession(session.id);
-        focusNeighbourTerminal([session.id]);
+        await api.killSession(session.id, here(projectId) ? undefined : projectId);
+        if (here(projectId)) focusNeighbourTerminal([session.id]);
       },
     });
 

@@ -6,19 +6,9 @@ import { switchProjectStores } from "./projectStores";
 import type { Health, Interaction, Session } from "./types";
 
 /**
- * The session a project switch landed on, when it is not running: shown with
- * a Resume button instead of being resumed, since nobody asked for it.
- */
-let landedOn: string | null = null;
-export function takeLanding(sessionId: string): boolean {
-  // Read, not consumed (React may build the view twice); going anywhere by hand clears it.
-  return landedOn === sessionId;
-}
-
-/**
  * Where switching to a project lands: a live session waiting on you, else a
  * live one running, else the latest done one, else the latest session (hub
- * tasks aside); the project's overview only when it has none.
+ * tasks aside), which opening resumes; the project's overview only when it has none.
  */
 function landingSession(sessions: Session[]): Session | null {
   const latest = (list: Session[]) => [...list].sort((a, b) => (b.lastAt ?? b.startedAt ?? "").localeCompare(a.lastAt ?? a.startedAt ?? ""))[0] ?? null;
@@ -209,7 +199,6 @@ export const useStore = create<State>((set, get) => {
     },
 
     go: (view) => {
-      landedOn = null;
       window.location.hash = hashOf(get().projectId, view, get().windowed).slice(1);
       set({ view });
     },
@@ -226,7 +215,6 @@ export const useStore = create<State>((set, get) => {
         (sessions) => {
           const target = landingSession(sessions);
           if (!target) return show({ kind: "page", page: "overview" });
-          landedOn = target.live ? null : target.id;
           show({ kind: "session", id: target.id });
         },
         // An unreadable project still opens; its overview says what is wrong.
@@ -235,7 +223,6 @@ export const useStore = create<State>((set, get) => {
     },
 
     openSessionIn: (projectId, sessionId) => {
-      landedOn = null;
       if (projectId === get().projectId) return get().go({ kind: "session", id: sessionId });
       window.location.hash = hashOf(projectId, { kind: "session", id: sessionId }, false).slice(1);
     },

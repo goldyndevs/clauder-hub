@@ -291,6 +291,9 @@ export interface LiveSession {
 export interface LiveProject {
   id: string;
   name: string;
+  root: string;
+  muted: boolean;
+  paused: boolean;
   live: LiveSession[];
   recent: LiveSession[];
 }

@@ -106,8 +106,13 @@ export const api = {
   startPurpose: (kind: PurposeKind, targetId?: string, size: TerminalSize = {}) =>
     post<{ sessionId: string; terminalId: string }>("/purpose-sessions", { kind, targetId, ...size }),
   resumeSession: (id: string, size: TerminalSize = {}) => post<{ sessionId: string; terminalId: string }>(`/sessions/${id}/resume`, size),
-  killSession: (id: string) => post(`/sessions/${id}/kill`),
-  renameSession: (id: string, title: string) => put(`/sessions/${id}/title`, { title }),
+  /** With a project id, a session of that project rather than the open one (the live panel). */
+  killSession: (id: string, projectId?: string) =>
+    projectId ? call(`/api/p/${encodeURIComponent(projectId)}/sessions/${id}/kill`, { method: "POST" }) : post(`/sessions/${id}/kill`),
+  renameSession: (id: string, title: string, projectId?: string) =>
+    projectId
+      ? call(`/api/p/${encodeURIComponent(projectId)}/sessions/${id}/title`, { method: "PUT", body: JSON.stringify({ title }) })
+      : put(`/sessions/${id}/title`, { title }),
   deletionPlan: (id: string) =>
     request<{
       sessionId: string;

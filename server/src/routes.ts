@@ -149,8 +149,9 @@ hubApi.get(
  */
 hubApi.get(
   "/global/live",
-  wrap(() =>
-    acrossProjects((info) => {
+  wrap(() => {
+    const muted = new Set(mutedProjects());
+    return acrossProjects((info) => {
       const sessions = listSessions();
       const pick = (session: (typeof sessions)[number]) => ({
         id: session.id,
@@ -164,12 +165,13 @@ hubApi.get(
         .filter((session) => !session.live && session.lastAt)
         .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""))
         .slice(0, 8);
-      return { id: info.id, name: info.name, live: live.map(pick), recent: recent.map(pick) };
+      // root, muted and paused for the project's right-click menu, the same as on its card.
+      return { id: info.id, name: info.name, root: info.root, muted: muted.has(info.id), paused: notificationsPaused(), live: live.map(pick), recent: recent.map(pick) };
     })
       .filter((project) => project.live.length)
       // By name, so a group stays where it was when another project is opened.
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
-  ),
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }),
 );
 
 /** Everything waiting on a person, in every project, newest first; answered through each project's own API. */

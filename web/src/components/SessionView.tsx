@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { compact, totalTokens, when } from "../lib/format";
-import { attempt, openWindow, takeLanding, useStore } from "../lib/store";
+import { attempt, openWindow, useStore } from "../lib/store";
 import type { Interaction, SessionDetail } from "../lib/types";
 import { Activity } from "./Activity";
 import { useConfirm } from "./Confirm";
@@ -35,13 +35,12 @@ export function SessionView({ id }: { id: string }) {
 
   // Opening a session opens its terminal: one that is not running is resumed straight away.
   // Decided once per visit, so stopping it here does not bring it back on its own.
-  // Landed on by a project switch rather than picked: it waits for Resume instead.
-  const [opening, setOpening] = useState<"idle" | "starting" | "failed" | "landed">(() => (takeLanding(id) ? "landed" : "idle"));
+  const [opening, setOpening] = useState<"idle" | "starting" | "failed">("idle");
   const decided = useRef(false);
   useEffect(() => {
     if (decided.current || !session) return;
     decided.current = true;
-    if (session.live || opening === "landed") return;
+    if (session.live) return;
     setOpening("starting");
     api.resumeSession(id).then(
       () => setOpening("idle"),
@@ -179,9 +178,9 @@ export function SessionView({ id }: { id: string }) {
               {opening === "starting" ? (
                 <div className="text-xs text-muted-foreground">Starting the terminal...</div>
               ) : (
-                // Shown when the automatic start failed, after the session was stopped here, or when a project switch landed here.
+                // Shown only when the automatic start failed, or after the session was stopped here.
                 <Button variant="primary" size="md" onClick={() => void resume()}>
-                  <Play size={13} /> {opening === "landed" ? "Resume this session" : "Start the terminal again"}
+                  <Play size={13} /> Start the terminal again
                 </Button>
               )}
               {session.done && (

@@ -9,9 +9,9 @@ import { focusNeighbourTerminal, useSessionActions } from "./SessionActions";
 import { StatusDot } from "./Sidebar";
 
 /** label, icon, action, separated from the items above, disabled */
-type MenuItem = [string, typeof X, () => void, boolean?, boolean?];
+export type MenuItem = [string, typeof X, () => void, boolean?, boolean?];
 
-function TabMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose: () => void }) {
+export function TabMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose: () => void }) {
   useEffect(() => {
     const close = () => onClose();
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();

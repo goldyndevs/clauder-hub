@@ -48,8 +48,8 @@ function copyText(text: string, what: string): void {
 /** What the project menu needs to know of a project; muted and paused are unknown until the overview has loaded. */
 type MenuProject = Pick<GlobalProject, "id" | "name" | "root"> & Partial<Pick<GlobalProject, "muted" | "paused">>;
 
-/** A project's right-click menu, on its card and in the sidebar: open it, quiet it, copy where it is, show it, take it off the hub. */
-function ProjectMenu({ project, x, y, onClose }: { project: MenuProject; x: number; y: number; onClose: () => void }) {
+/** A project's right-click menu, on its card, in the sidebar and in the live panel: open it, quiet it, copy where it is, show it, take it off the hub. */
+export function ProjectMenu({ project, x, y, onClose }: { project: MenuProject; x: number; y: number; onClose: () => void }) {
   const openProject = useStore((state) => state.openProject);
   const confirm = useConfirm();
   const toggleMute = () =>
