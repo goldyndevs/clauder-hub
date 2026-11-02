@@ -294,6 +294,8 @@ export interface GlobalProject {
   tokensToday: number;
   /** The global channels do not hear from it. */
   muted: boolean;
+  /** Do not disturb: its notifications are paused on every channel. */
+  paused: boolean;
 }
 
 /** Something waiting on a person, with the project it is in. */

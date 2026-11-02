@@ -1,4 +1,4 @@
-import { Bell, BellOff, CalendarClock, ChevronsLeft, ChevronsRight, FolderGit2, Inbox, LayoutGrid, ListOrdered, Menu, Plus, Radio, Wrench, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, CalendarClock, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -27,6 +27,95 @@ const GLOBAL_NAV: Array<{ page: Page; label: string; icon: typeof Inbox }> = [
   { page: "channels", label: "Channels", icon: Radio },
 ];
 
+let homeFolder: Promise<string | null> | null = null;
+/** The hub machine's home folder, asked once: a project's relative path starts from it. */
+function home(): Promise<string | null> {
+  homeFolder ??= api.folders().then(
+    (folders) => folders.home,
+    () => null,
+  );
+  return homeFolder;
+}
+
+function copyText(text: string, what: string): void {
+  void navigator.clipboard?.writeText(text).then(
+    () => useStore.getState().notify(`Copied the ${what}.`),
+    () => useStore.getState().notify("The browser did not allow copying.", "error"),
+  );
+}
+
+/** A project card's right-click menu: open it, quiet it, copy where it is, show it, take it off the hub. */
+function ProjectMenu({ project, x, y, onClose, remove, toggleMute }: { project: GlobalProject; x: number; y: number; onClose: () => void; remove: () => void; toggleMute: () => void }) {
+  const openProject = useStore((state) => state.openProject);
+  useEffect(() => {
+    const close = () => onClose();
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const relative = async () => {
+    const base = await home();
+    const root = project.root;
+    const sep = root.includes("\\") ? "\\" : "/";
+    const inside = base && root.toLowerCase().startsWith(`${base.replace(/[\\/]$/, "").toLowerCase()}${sep}`);
+    copyText(inside ? `~${sep}${root.slice(base!.replace(/[\\/]$/, "").length + 1)}` : root, "relative path");
+  };
+
+  const item = (label: string, icon: typeof Bell, run: () => void, options: { danger?: boolean; hint?: string } = {}) => {
+    const Icon = icon;
+    return (
+      <button
+        title={options.hint}
+        // Pointer-down closes the menu, so the action runs on that, before the window listener.
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onClose();
+          run();
+        }}
+        className={cn("flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs", options.danger ? "text-severity-critical hover:bg-destructive/15" : "hover:bg-muted")}
+      >
+        <Icon size={13} />
+        {label}
+      </button>
+    );
+  };
+
+  return (
+    <div
+      role="menu"
+      className="fixed z-50 w-56 rounded-lg border bg-card p-1 shadow-lg"
+      style={{ left: Math.min(x, window.innerWidth - 232), top: Math.min(y, window.innerHeight - 290) }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      {item("Open", ArrowRight, () => openProject(project.id))}
+      <div className="my-1 border-t" />
+      {project.paused
+        ? item("Allow notifications", Bell, () => void attempt(() => api.pauseNotificationsIn(project.id, false), `Notifications from ${project.name} are back on.`))
+        : item("Do not disturb", BellOff, () => void attempt(() => api.pauseNotificationsIn(project.id, true), `No channel hears from ${project.name} now.`), {
+            hint: "Pauses every channel of this project, and the global ones for it; questions still wait in the inbox",
+          })}
+      {item(project.muted ? "Hear on global channels" : "Mute on global channels", project.muted ? Radio : VolumeX, toggleMute, {
+        hint: "Only the global channels; the project's own channels are not changed",
+      })}
+      <div className="my-1 border-t" />
+      {item("Copy Path", Link, () => copyText(project.root, "path"))}
+      {item("Copy Relative Path", Link, () => void relative(), { hint: "From your home folder, as ~/..." })}
+      {item("Reveal in File Explorer", FolderOpen, () => void attempt(() => api.revealIn(project.id)))}
+      <div className="my-1 border-t" />
+      {item("Remove from the hub", Trash2, remove, { danger: true, hint: "The folder and its saved settings stay" })}
+    </div>
+  );
+}
+
 /** One project at a glance: what runs, what waits, what comes next. A click opens it. */
 function ProjectCard({ project }: { project: GlobalProject }) {
   const openProject = useStore((state) => state.openProject);
@@ -44,11 +133,26 @@ function ProjectCard({ project }: { project: GlobalProject }) {
         useStore.getState().notify(`Removed ${project.name}. Opening its folder again brings it back as it was.`);
       },
     });
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   return (
-    <div className="card flex min-w-0 flex-col gap-2 p-3">
+    <div
+      className="card flex min-w-0 flex-col gap-2 p-3"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setMenu({ x: event.clientX, y: event.clientY });
+      }}
+    >
+      {menu && <ProjectMenu project={project} {...menu} onClose={() => setMenu(null)} remove={() => void remove()} toggleMute={() => void toggleMute()} />}
       <div className="flex items-start gap-2">
         <button onClick={() => openProject(project.id)} className="min-w-0 flex-1 text-left" title={project.root}>
-          <div className="truncate text-sm font-semibold hover:underline">{project.name}</div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-sm font-semibold hover:underline">{project.name}</span>
+            {project.paused && (
+              <span className="flex shrink-0 items-center gap-0.5 rounded bg-severity-warning/15 px-1 text-[9px] font-medium text-severity-warning" title="Do not disturb: no channel hears from it">
+                <BellOff size={9} /> DND
+              </span>
+            )}
+          </div>
           <div className="truncate text-[10px] text-muted-foreground">{project.root}</div>
         </button>
         <button

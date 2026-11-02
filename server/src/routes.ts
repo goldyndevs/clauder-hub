@@ -136,6 +136,8 @@ hubApi.get(
         activeToday: activeToday.length,
         tokensToday: tokens,
         muted: muted.has(info.id),
+        // Do not disturb for the whole project: none of its channels, nor the global ones, hear of it.
+        paused: notificationsPaused(),
       };
     });
   }),

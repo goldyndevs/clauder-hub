@@ -86,6 +86,9 @@ export const api = {
   chooseIn: (projectId: string, id: string, ref: string) =>
     hubRequest<Interaction>(`/p/${encodeURIComponent(projectId)}/interactions/${id}/choose`, { method: "POST", body: JSON.stringify({ ref }) }),
 
+  pauseNotificationsIn: (projectId: string, paused: boolean) =>
+    hubRequest<{ paused: boolean }>(`/p/${encodeURIComponent(projectId)}/notifications/paused`, { method: "PUT", body: JSON.stringify({ paused }) }),
+  revealIn: (projectId: string) => hubRequest<{ path: string }>(`/p/${encodeURIComponent(projectId)}/files/reveal`, { method: "POST", body: JSON.stringify({ path: "" }) }),
   dismissIn: (projectId: string, id: string) => hubRequest<Interaction>(`/p/${encodeURIComponent(projectId)}/interactions/${id}/dismiss`, { method: "POST" }),
 
   sessions: () => request<Session[]>("/sessions"),
