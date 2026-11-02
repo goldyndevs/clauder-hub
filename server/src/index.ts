@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import fs from "node:fs";
 import type { Server } from "node:http";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
@@ -77,6 +78,24 @@ async function otherHubPort(): Promise<number | null> {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return null;
+}
+/** Something takes connections on the port; a refused connection is the only no. */
+const listening = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const socket = net.connect(port, "127.0.0.1");
+    const done = (answer: boolean) => {
+      socket.destroy();
+      resolve(answer);
+    };
+    socket.setTimeout(2000);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(true));
+    socket.once("error", () => done(false));
+  });
+// A hub that died without letting go leaves its pid to be reused by any program; a hub that wrote its port listens on it.
+const leftover = readLock();
+if (leftover?.port && alive(leftover.pid) && !(await listening(leftover.port)) && readLock()?.pid === leftover.pid) {
+  fs.rmSync(lockFile, { force: true });
 }
 // A hub that was stopping as this one started (a reload) has let go of the lock by the time it was waited for.
 if (!takeLock() && !(await otherHubPort().then((found) => found === null && takeLock()))) {

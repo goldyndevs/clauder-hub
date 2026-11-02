@@ -1,8 +1,9 @@
-import { Pencil, Plus, Radio, Send, Trash2 } from "lucide-react";
+import { Monitor, Pencil, Plus, Radio, Send, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { projectApi } from "../lib/project";
 import { cn } from "../lib/cn";
-import { attempt, useLive } from "../lib/store";
+import { attempt, useLive, useStore } from "../lib/store";
 import type { Channel } from "../lib/types";
 import { usePurpose } from "../lib/usePurpose";
 import { Section } from "./Charts";
@@ -20,18 +21,64 @@ const KIND_LABEL: Record<string, string> = {
   done: "Task done",
 };
 
+const HIGHLIGHT_EVENT = "clauder:highlight-notifications";
+let highlightPending = false;
+
+/** Opens the channels page with the all-channels switch flashed, as the muted bell next to the version does. */
+export function showNotificationsSwitch(): void {
+  highlightPending = true;
+  useStore.getState().go({ kind: "page", page: "channels" });
+  window.dispatchEvent(new Event(HIGHLIGHT_EVENT));
+}
+
+function Switch({ on, label, onToggle, className }: { on: boolean; label: string; onToggle: () => void; className?: string }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      title={label}
+      onClick={onToggle}
+      className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors", on ? "bg-primary" : "bg-foreground/20", className)}
+    >
+      <span className={cn("absolute top-0.5 h-4 w-4 rounded-full bg-background transition-all", on ? "left-[18px]" : "left-0.5")} />
+    </button>
+  );
+}
+
 /**
- * Where a session can reach a person. Every enabled channel gets everything
- * it subscribes to. Channels are added and changed in a Claude session for
- * that purpose, tokens included.
+ * Where a session can reach a person. One switch and one choice of what is
+ * worth a notification hold for every channel; this computer is one of them.
+ * Channels are added and changed in a Claude session for that purpose,
+ * tokens included.
  */
 export function ChannelsPage({ global = false }: { global?: boolean }) {
   const live = useLive(() => api.channels(), ["channels"]);
   const { starting, start } = usePurpose();
   const confirm = useConfirm();
-  // This computer has its own switch above; the list is for the platforms that reach a person elsewhere.
-  const remote = (live.data?.channels ?? []).filter((channel) => channel.kind !== "device");
   const kinds = live.data?.kinds ?? [];
+  const paused = live.data?.paused ?? false;
+  const chosen = new Set(live.data?.notifyKinds ?? []);
+  // This computer is a card of its own in each project; the global channels are the remote ones.
+  const device = live.data?.channels.find((channel) => channel.kind === "device");
+  const remote = (live.data?.channels ?? []).filter((channel) => channel.kind !== "device");
+
+  const master = useRef<HTMLDivElement>(null);
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    const show = () => {
+      if (!highlightPending || !master.current) return;
+      highlightPending = false;
+      master.current.scrollIntoView({ block: "center", behavior: "smooth" });
+      setFlash(true);
+      window.setTimeout(() => setFlash(false), 2200);
+    };
+    show();
+    window.addEventListener(HIGHLIGHT_EVENT, show);
+    return () => window.removeEventListener(HIGHLIGHT_EVENT, show);
+  }, [live.data !== null]);
+
+  const toggleKind = (kind: string) => void attempt(() => api.setNotifyKinds(chosen.has(kind) ? [...chosen].filter((item) => item !== kind) : [...chosen, kind]));
 
   return (
     // On #/global it is one section of a page that scrolls on its own.
@@ -54,12 +101,39 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
           </Button>
         </div>
 
-        {/* Each project already notifies this computer; the global channels are the remote ones. */}
-        {live.data && !global && <DeviceNotifications channel={live.data.channels.find((channel) => channel.kind === "device")} kinds={live.data.interactionKinds} />}
+        {live.data && (
+          <Section
+            title="Notifications"
+            description={paused ? "Paused: no channel hears of anything; questions still wait in the inbox." : "For every channel below, this computer included."}
+            action={
+              <div ref={master} className={cn("rounded-full transition-shadow", flash && "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse")}>
+                <Switch on={!paused} label={paused ? "Turn notifications back on" : "Pause notifications on every channel"} onToggle={() => void attempt(() => api.setNotificationsPaused(!paused))} />
+              </div>
+            }
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[11px] text-muted-foreground">Notify for</span>
+              {(live.data.interactionKinds ?? []).map((kind) => (
+                <button
+                  key={kind}
+                  disabled={paused}
+                  onClick={() => toggleKind(kind)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-0.5 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                    chosen.has(kind) ? "border-primary bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {KIND_LABEL[kind] ?? kind}
+                </button>
+              ))}
+            </div>
+          </Section>
+        )}
 
         <Section title="Channels" description="Send /help to the Telegram bot, or !help in the Slack channel, for the commands: new session, run, sessions, summary, stop, queue.">
-          {remote.length ? (
+          {live.data && (!global || remote.length) ? (
             <div className="divide-y rounded-md border">
+              {!global && <DeviceCard channel={device} />}
               {remote.map((channel) => (
                 <div key={channel.id} className="flex items-center gap-2 px-3 py-2.5">
                   <Radio size={14} className="shrink-0 text-muted-foreground" />
@@ -69,9 +143,7 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
                       <StatusBadge tone="off">{kinds.find((kind) => kind.kind === channel.kind)?.label ?? channel.kind}</StatusBadge>
                       <StatusBadge tone={channel.status.ok ? "success" : channel.enabled ? "warning" : "off"}>{channel.status.ok ? "connected" : channel.enabled ? "not connected" : "off"}</StatusBadge>
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {channel.status.detail} · {channel.kinds.map((kind) => KIND_LABEL[kind] ?? kind).join(", ")}
-                    </div>
+                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{channel.status.detail}</div>
                     {channel.kind === "http" && (
                       // Replies to a webhook channel come back here, with the reply secret in x-clauder-secret.
                       <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
@@ -86,7 +158,11 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
                   <Button variant="ghost" size="icon" title="Edit with Claude" onClick={() => void start("edit-channel", channel.id)}>
                     <Pencil size={13} />
                   </Button>
-                  <Button variant="ghost" size="icon" title="Delete" onClick={() =>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Delete"
+                    onClick={() =>
                       void confirm({
                         title: `Remove '${channel.name}'?`,
                         description: "Sessions stop reaching you there.",
@@ -94,14 +170,15 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
                         tone: "destructive",
                         run: () => api.deleteChannel(channel.id),
                       })
-                    }>
+                    }
+                  >
                     <Trash2 size={13} />
                   </Button>
                 </div>
               ))}
             </div>
           ) : (
-            <Empty variant="inline" title="No channels yet. Without one, questions wait in the dashboard's inbox and the terminal." />
+            live.data && <Empty variant="inline" title="No channels yet. Without one, questions wait in the dashboard's inbox and the terminal." />
           )}
         </Section>
       </div>
@@ -109,68 +186,35 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
   );
 }
 
-const DEVICE_DEFAULT_KINDS = ["permission", "question", "mcp"];
-
 /**
  * Notifications on the computer the hub runs on: the operating system's own
  * (a Windows toast, macOS Notification Center, notify-send), sent by the hub,
- * so they arrive with every browser window closed. A switch, plus which kinds
- * of question are worth interrupting for.
+ * so they arrive with every browser window closed. Built in: switched, never
+ * edited or removed.
  */
-function DeviceNotifications({ channel, kinds }: { channel: Channel | undefined; kinds: string[] }) {
+function DeviceCard({ channel }: { channel: Channel | undefined }) {
   const on = Boolean(channel?.enabled);
-  const chosen = new Set(channel?.kinds ?? DEVICE_DEFAULT_KINDS);
-  const save = (patch: { enabled?: boolean; kinds?: string[] }) =>
-    attempt(() =>
-      api.saveChannel({
-        id: channel?.id,
-        kind: "device",
-        name: "This computer",
-        config: {},
-        enabled: patch.enabled ?? on,
-        kinds: patch.kinds ?? [...chosen],
-      }),
-    );
+  const toggle = () =>
+    attempt(() => api.saveChannel({ id: channel?.id, kind: "device", name: "This computer", config: {}, enabled: !on, kinds: channel?.kinds }));
   return (
-    <Section
-      title="This computer"
-      description="System notifications from the hub itself; they arrive even with the browser closed."
-      action={
-        <div className="flex items-center gap-1.5">
-          {on && channel && (
-            <Button variant="ghost" size="icon" title="Send a test notification" onClick={() => void attempt(() => api.testChannel(channel.id), "Test notification sent.")}>
-              <Send size={13} />
-            </Button>
-          )}
-          <button
-            role="switch"
-            aria-checked={on}
-            aria-label="Notify on this computer"
-            onClick={() => void save({ enabled: !on })}
-            className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors", on ? "bg-primary" : "bg-foreground/20")}
-          >
-            <span className={cn("absolute top-0.5 h-4 w-4 rounded-full bg-background transition-all", on ? "left-[18px]" : "left-0.5")} />
-          </button>
+    <div className="flex items-center gap-2 px-3 py-2.5">
+      <Monitor size={14} className="shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <span className="min-w-0 truncate font-medium">This computer</span>
+          <StatusBadge tone="off">System notifications</StatusBadge>
+          <StatusBadge tone={on && channel?.status.ok ? "success" : on ? "warning" : "off"}>{on ? (channel?.status.ok ? "on" : "not working") : "off"}</StatusBadge>
         </div>
-      }
-    >
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-[11px] text-muted-foreground">Notify for</span>
-        {kinds.map((kind) => (
-          <button
-            key={kind}
-            disabled={!on}
-            onClick={() => void save({ kinds: chosen.has(kind) ? [...chosen].filter((item) => item !== kind) : [...chosen, kind] })}
-            className={cn(
-              "rounded-full border px-2.5 py-0.5 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-              chosen.has(kind) ? "border-primary bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {KIND_LABEL[kind] ?? kind}
-          </button>
-        ))}
-        {on && channel && !channel.status.ok && <span className="text-[11px] text-severity-critical">{channel.status.detail}</span>}
+        <div className={cn("mt-0.5 truncate text-[11px]", on && channel && !channel.status.ok ? "text-severity-critical" : "text-muted-foreground")}>
+          {on && channel && !channel.status.ok ? channel.status.detail : "From the hub itself; they arrive even with the browser closed."}
+        </div>
       </div>
-    </Section>
+      {on && channel && (
+        <Button variant="ghost" size="icon" title="Send a test notification" onClick={() => void attempt(() => api.testChannel(channel.id), "Test notification sent.")}>
+          <Send size={13} />
+        </Button>
+      )}
+      <Switch on={on} label={on ? "Stop notifying on this computer" : "Notify on this computer"} onToggle={() => void toggle()} />
+    </div>
   );
 }

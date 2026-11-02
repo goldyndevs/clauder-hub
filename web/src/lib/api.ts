@@ -86,6 +86,8 @@ export const api = {
   chooseIn: (projectId: string, id: string, ref: string) =>
     hubRequest<Interaction>(`/p/${encodeURIComponent(projectId)}/interactions/${id}/choose`, { method: "POST", body: JSON.stringify({ ref }) }),
 
+  dismissIn: (projectId: string, id: string) => hubRequest<Interaction>(`/p/${encodeURIComponent(projectId)}/interactions/${id}/dismiss`, { method: "POST" }),
+
   sessions: () => request<Session[]>("/sessions"),
   session: (id: string) => request<SessionDetail>(`/sessions/${id}`),
   startSession: (body: { prompt?: string; category?: string; name?: string; permissionMode?: string } & TerminalSize) =>
@@ -109,6 +111,8 @@ export const api = {
   answer: (id: string, answer: string) => post<Interaction>(`/interactions/${id}/answer`, { answer }),
   /** A button press; the hub turns the button back into the answer it stands for. */
   choose: (id: string, ref: string) => post<Interaction>(`/interactions/${id}/choose`, { ref }),
+  /** Put away unanswered; nothing reaches the session. */
+  dismiss: (id: string) => post<Interaction>(`/interactions/${id}/dismiss`),
 
   inventory: () => request<Inventory>("/inventory"),
   stats: () => request<Stats>("/stats"),
@@ -126,7 +130,13 @@ export const api = {
   memoryFile: (path: string) => request<{ path: string; content: string; writable: boolean }>(`/memory/file?path=${encodeURIComponent(path)}`),
   saveMemoryFile: (path: string, content: string) => put<{ path: string; content: string }>("/memory/file", { path, content }),
 
-  channels: () => request<{ kinds: ChannelKindInfo[]; interactionKinds: string[]; channels: Channel[] }>("/channels"),
+  channels: () => request<{ kinds: ChannelKindInfo[]; interactionKinds: string[]; channels: Channel[]; paused: boolean; notifyKinds: string[] }>("/channels"),
+  /** Holds back every channel at once; questions still wait in the inbox. */
+  setNotificationsPaused: (paused: boolean) => put<{ paused: boolean }>("/notifications/paused", { paused }),
+  /** What is worth a notification, for every channel. */
+  setNotifyKinds: (kinds: string[]) => put<{ notifyKinds: string[] }>("/notifications/kinds", { kinds }),
+  setSessionQuiet: (id: string, quiet: boolean) => put<{ quiet: boolean }>(`/sessions/${id}/quiet`, { quiet }),
+  dismissWaiting: (id: string) => post<{ dismissed: number }>(`/sessions/${id}/dismiss-waiting`),
   saveChannel: (channel: Partial<Channel> & { kind: string; name: string }) =>
     channel.id ? put<Channel>(`/channels/${channel.id}`, channel) : post<Channel>("/channels", channel),
   deleteChannel: (id: string) => del(`/channels/${id}`),

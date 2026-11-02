@@ -3,13 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { deleteCategory, listCategories, saveCategory } from "./categories.js";
-import { CHANNEL_KINDS, INTERACTION_KINDS, deleteChannel, httpReply, listChannels, mutedProjects, saveChannel, setMuted, testChannel } from "./channels/index.js";
+import { CHANNEL_KINDS, INTERACTION_KINDS, deleteChannel, httpReply, listChannels, mutedProjects, notificationsPaused, notifyKinds, saveChannel, setMuted, setNotificationsPaused, setNotifyKinds, setSessionQuiet, testChannel } from "./channels/index.js";
 import { checkClaudeCode, claudeStatus, findClaudeCode } from "./claudeCode.js";
 import { iconFile, iconManifest } from "./fileIcons.js";
 import { claudeSettings, EFFORTS, mcpSuggestionsEnabled, PERMISSION_MODES, saveClaudeSettings, setMcpSuggestionsEnabled } from "./claudeSettings.js";
 import { subscribe } from "./events.js";
 import { handleHook } from "./hooks.js";
-import { AnswerError, answerInteraction, chooseInteraction, listInteractions, withPresentation } from "./interactions.js";
+import { AnswerError, answerInteraction, chooseInteraction, dismissInteraction, listInteractions, withPresentation } from "./interactions.js";
 import { isDefinitionFile, isMemoryFile, memoryFiles, readInventory } from "./inventory.js";
 import { cancelRun, deleteJob, enqueue, getJob, listJobs, listRuns, resumeRun, rotateToken, saveJob, stopRun } from "./jobs.js";
 import { catalogEntry, MCP_CATALOG } from "./mcpCatalog.js";
@@ -332,6 +332,17 @@ api.post(
   "/interactions/:id/answer",
   wrap((req) => answerInteraction(req.params.id, String(req.body?.answer ?? ""), "dashboard")),
 );
+api.post("/interactions/:id/dismiss", wrap((req) => dismissInteraction(req.params.id)));
+/** Every question the session has open, put away unanswered. */
+api.post(
+  "/sessions/:id/dismiss-waiting",
+  wrap((req) => {
+    const open = listInteractions({ sessionId: req.params.id, status: "open" });
+    for (const item of open) dismissInteraction(item.id);
+    return { dismissed: open.length };
+  }),
+);
+api.put("/sessions/:id/quiet", wrap((req) => setSessionQuiet(req.params.id, Boolean(req.body?.quiet))));
 
 // Visualisation ----------------------------------------------------------
 
@@ -417,7 +428,9 @@ api.put(
 
 // Channels ---------------------------------------------------------------
 
-api.get("/channels", wrap(() => ({ kinds: CHANNEL_KINDS, interactionKinds: INTERACTION_KINDS, channels: listChannels() })));
+api.get("/channels", wrap(() => ({ kinds: CHANNEL_KINDS, interactionKinds: INTERACTION_KINDS, channels: listChannels(), paused: notificationsPaused(), notifyKinds: notifyKinds() })));
+api.put("/notifications/kinds", wrap((req) => ({ notifyKinds: setNotifyKinds(Array.isArray(req.body?.kinds) ? req.body.kinds.map(String) : []) })));
+api.put("/notifications/paused", wrap((req) => setNotificationsPaused(Boolean(req.body?.paused))));
 api.post("/channels", wrap((req) => saveChannel(req.body ?? {})));
 api.put("/channels/:id", wrap((req) => saveChannel({ ...(req.body ?? {}), id: req.params.id })));
 api.delete("/channels/:id", wrap((req) => deleteChannel(req.params.id)));

@@ -1,16 +1,11 @@
 import { useRef, useState } from "react";
 import { api } from "../lib/api";
+import { bytes } from "../lib/format";
 import { useStore } from "../lib/store";
 import type { Session } from "../lib/types";
 import { useConfirm } from "./Confirm";
 import { Checkbox } from "./ui/Checkbox";
 import { Input } from "./ui/Input";
-
-function bytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / 1024 / 1024).toFixed(1)} MB`;
-}
 
 /** The confirm's body holds this checkbox; what it says is read back through the ref when the delete runs. */
 function TempChoice({ temp, choice }: { temp: { path: string; bytes: number }; choice: { current: boolean } }) {

@@ -178,6 +178,57 @@ export function stopChannels(): void {
 
 // Global: muted projects ------------------------------------------------------
 
+function readSetting<T>(key: string, fallback: T): T {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
+  return parseJson<T>(row?.value, fallback);
+}
+function writeSetting(key: string, value: unknown): void {
+  db.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").run(
+    key,
+    JSON.stringify(value),
+    now(),
+  );
+}
+
+/** Every channel of the current project (or of #/global) is held back: questions still wait in the inbox. */
+export function notificationsPaused(): boolean {
+  return readSetting<boolean>("notificationsPaused", false) === true;
+}
+export function setNotificationsPaused(paused: boolean): { paused: boolean } {
+  writeSetting("notificationsPaused", paused);
+  broadcast("channels", {});
+  return { paused };
+}
+
+/**
+ * What is worth a notification, one choice for every channel. Before it was
+ * one setting, each channel had its own list: what any of them took is kept.
+ */
+export function notifyKinds(): string[] {
+  const saved = readSetting<string[] | null>("notifyKinds", null);
+  if (saved) return saved.filter((kind) => (INTERACTION_KINDS as readonly string[]).includes(kind));
+  const channels = allChannels();
+  return channels.length ? INTERACTION_KINDS.filter((kind) => channels.some((channel) => channel.kinds.includes(kind))) : [...INTERACTION_KINDS];
+}
+export function setNotifyKinds(kinds: string[]): string[] {
+  writeSetting("notifyKinds", kinds.filter((kind) => (INTERACTION_KINDS as readonly string[]).includes(kind)));
+  broadcast("channels", {});
+  return notifyKinds();
+}
+
+/** Sessions set to do not disturb: nothing of theirs goes out on any channel. */
+export function quietSessions(): string[] {
+  return readSetting<string[]>("quietSessions", []);
+}
+export function setSessionQuiet(sessionId: string, quiet: boolean): { quiet: boolean } {
+  const next = new Set(quietSessions());
+  if (quiet) next.add(sessionId);
+  else next.delete(sessionId);
+  writeSetting("quietSessions", [...next]);
+  broadcast("sessions", { sessionId });
+  return { quiet };
+}
+
 /** The projects the global channels do not hear from, kept in the global context's settings. */
 export function mutedProjects(): string[] {
   const global = globalContext();
@@ -245,8 +296,9 @@ function messageText(interaction: Interaction, session: string): string {
 async function deliver(interaction: Interaction, sessionTitle: string, projectId: string | null): Promise<void> {
   const text = messageText(interaction, sessionTitle);
   const presented = present(interaction, sessionTitle);
+  if (!notifyKinds().includes(interaction.kind)) return;
   for (const channel of allChannels()) {
-    if (!channel.enabled || !channel.kinds.includes(interaction.kind)) continue;
+    if (!channel.enabled) continue;
     const adapter = adapters.get(adapterKey(channel.id));
     if (!adapter) continue;
     const thread = (db.prepare("SELECT thread FROM channel_threads WHERE channel_id = ? AND session_id = ?").get(channel.id, interaction.sessionId) as { thread: string } | undefined)?.thread ?? null;
@@ -289,12 +341,15 @@ async function deliver(interaction: Interaction, sessionTitle: string, projectId
 
 /** The project's own channels, then the global ones unless this project is muted there. */
 export async function notifyChannels(interaction: Interaction, sessionTitle: string): Promise<void> {
+  // Paused here, or the session set to do not disturb: none of the project's channels, nor the global ones, hear of it.
+  if (notificationsPaused() || quietSessions().includes(interaction.sessionId)) return;
   await deliver(interaction, sessionTitle, null);
   broadcast("channels", {});
   const project = currentProject();
   const global = globalContext();
   if (!global || isGlobal(project) || mutedProjects().includes(project.id)) return;
   await withProject(global, async () => {
+    if (notificationsPaused()) return;
     await deliver(interaction, `${project.name} · ${sessionTitle}`, project.id);
     broadcast("channels", {});
   });

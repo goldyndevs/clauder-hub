@@ -7,6 +7,13 @@ export function compact(value: number): string {
   return String(value);
 }
 
+export function bytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 ** 3) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  return `${(value / 1024 ** 3).toFixed(1)} GB`;
+}
+
 export function totalTokens(tokens?: Tokens | null): number {
   if (!tokens) return 0;
   return tokens.input + tokens.output + tokens.cacheRead + tokens.cacheCreation;

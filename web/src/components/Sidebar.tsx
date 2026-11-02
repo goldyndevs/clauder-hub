@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   Bell,
+  BellOff,
   BookText,
   Bot,
   CalendarClock,
@@ -17,6 +18,7 @@ import {
   Play,
   MessageSquareText,
   Layers,
+  ListX,
   Plug,
   PlugZap,
   Plus,
@@ -33,7 +35,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../lib/cn";
-import { ago, compact, totalTokens } from "../lib/format";
+import { ago, bytes, compact, totalTokens } from "../lib/format";
 import { api } from "../lib/api";
 import { attempt, openWindow, useStore, type Page } from "../lib/store";
 import type { PurposeKind, Session } from "../lib/types";
@@ -524,12 +526,22 @@ function SessionMenu({ session, x, y, onClose }: { session: Session; x: number; 
       role="menu"
       className="fixed z-50 w-48 rounded-lg border bg-card p-1 shadow-lg"
       // Kept inside the window when opened near its bottom or right edge.
-      style={{ left: Math.min(x, window.innerWidth - 200), top: Math.min(y, window.innerHeight - 170) }}
+      style={{ left: Math.min(x, window.innerWidth - 200), top: Math.min(y, window.innerHeight - 240) }}
       onPointerDown={(event) => event.stopPropagation()}
     >
       {item("Open", ArrowRight, () => go({ kind: "session", id: session.id }))}
       {item("Open in new window", ExternalLink, () => openWindow({ kind: "session", id: session.id }))}
       {item("Rename", Pencil, () => void actions.rename(session))}
+      <div className="my-1 border-t" />
+      {session.quiet
+        ? item("Allow notifications", Bell, () => void attempt(() => api.setSessionQuiet(session.id, false), "Notifications back on for this session."))
+        : item("Do not disturb", BellOff, () => void attempt(() => api.setSessionQuiet(session.id, true), "Nothing from this session goes out on a channel."), {
+            hint: "Its questions still wait in the inbox; no channel hears of them",
+          })}
+      {item(`Clear waiting${session.openInteractions ? ` (${session.openInteractions})` : ""}`, ListX, () => void attempt(() => api.dismissWaiting(session.id), "Cleared."), {
+        disabled: !session.openInteractions,
+        hint: "Puts away what it waits on, unanswered; nothing is typed into it",
+      })}
       <div className="my-1 border-t" />
       {item("Delete permanently", Trash2, () => void actions.remove(session), {
         danger: true,
@@ -593,6 +605,11 @@ function SessionGroup({ title, sessions, action, flash = 0 }: { title: string; s
                       <Wrench size={9} /> task
                     </span>
                   )}
+                  {session.quiet && (
+                    <span className="shrink-0 text-muted-foreground" title="Do not disturb: no channel hears from it">
+                      <BellOff size={11} />
+                    </span>
+                  )}
                   {session.openInteractions > 0 && <span className="grid h-4 min-w-[1rem] shrink-0 place-items-center rounded-full bg-severity-warning px-1 text-[10px] font-semibold leading-none text-background">{session.openInteractions}</span>}
                 </div>
                 <div className="mt-0.5 flex items-center gap-1.5 pl-4 text-[10px] text-muted-foreground">
@@ -605,10 +622,10 @@ function SessionGroup({ title, sessions, action, flash = 0 }: { title: string; s
                       <span>{compact(totalTokens(session.tokens))} tok</span>
                     </>
                   )}
-                  {session.subagentCount ? (
+                  {session.diskBytes ? (
                     <>
                       <span>·</span>
-                      <span>{session.subagentCount} agents</span>
+                      <span title="On disk: transcript, subagents, file snapshots and temp folder">{bytes(session.diskBytes)}</span>
                     </>
                   ) : null}
                 </div>

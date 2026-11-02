@@ -23,7 +23,7 @@ function TabMenu({ x, y, items, onClose }: { x: number; y: number; items: Array<
     <div
       role="menu"
       className="fixed z-50 w-44 rounded-lg border bg-card p-1 shadow-lg"
-      style={{ left: Math.min(x, window.innerWidth - 184), top: Math.min(y, window.innerHeight - 150) }}
+      style={{ left: Math.min(x, window.innerWidth - 184), top: Math.min(y, window.innerHeight - 180) }}
       onPointerDown={(event) => event.stopPropagation()}
     >
       {items.map(([label, Icon, run, separated]) => (
@@ -77,15 +77,15 @@ export function TerminalTabs() {
       run: () => api.killSession(session.id),
     });
 
-  const stopAll = () =>
+  const stopMany = (targets: Session[], all: boolean) =>
     confirm({
-      title: `Stop all ${live.length} running terminal${live.length > 1 ? "s" : ""}?`,
+      title: `Stop ${all ? "all " : ""}${targets.length} ${all ? "running" : "other"} terminal${targets.length > 1 ? "s" : ""}?`,
       description: "Their conversations are kept for a later resume.",
-      body: <div className="space-y-0.5 text-[11px] text-muted-foreground">{live.map((session) => <div key={session.id} className="truncate">{session.title}</div>)}</div>,
-      confirmLabel: "Stop all",
+      body: <div className="space-y-0.5 text-[11px] text-muted-foreground">{targets.map((session) => <div key={session.id} className="truncate">{session.title}</div>)}</div>,
+      confirmLabel: all ? "Stop all" : "Stop others",
       tone: "destructive",
       run: async () => {
-        await Promise.all(live.map((session) => api.killSession(session.id)));
+        await Promise.all(targets.map((session) => api.killSession(session.id)));
       },
     });
 
@@ -100,7 +100,10 @@ export function TerminalTabs() {
             ["Open", ArrowRight, () => go({ kind: "session", id: menu.session.id })],
             ["Rename", Pencil, () => void actions.rename(menu.session)],
             ["Close", X, () => void stop(menu.session), true],
-            ["Close All", XCircle, () => void stopAll()],
+            ...(live.length > 1
+              ? [["Close Others", XCircle, () => void stopMany(live.filter((session) => session.id !== menu.session.id), false)] as [string, typeof X, () => void]]
+              : []),
+            ["Close All", XCircle, () => void stopMany(live, true)],
           ]}
         />
       )}

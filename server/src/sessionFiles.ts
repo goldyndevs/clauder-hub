@@ -75,6 +75,29 @@ function tempDirOf(id: string): string {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
 }
 
+const diskCache = new Map<string, { bytes: number; at: number }>();
+
+/**
+ * What deleting the session would free, its temp folder included, for the
+ * session list. Walking file snapshots is not free, so a count is kept a
+ * minute; keyed by project root, since one session list exists per project.
+ */
+export function sessionDiskBytes(id: string): number | null {
+  if (!UUID.test(id)) return null;
+  const key = `${projectRoot()}\0${id}`;
+  const hit = diskCache.get(key);
+  if (hit && Date.now() - hit.at < 60_000) return hit.bytes;
+  let bytes: number | null = null;
+  try {
+    const plan = deletionPlan(id);
+    bytes = plan.totalBytes + (plan.temp?.bytes ?? 0);
+  } catch {
+    // A file went away mid-walk: counted again next time.
+  }
+  if (bytes !== null) diskCache.set(key, { bytes, at: Date.now() });
+  return bytes ?? hit?.bytes ?? null;
+}
+
 /**
  * Everything of a session's that Claude Code keeps per session. Not
  * ~/.claude/history.jsonl: that is the prompt history every project shares,

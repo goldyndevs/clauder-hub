@@ -42,6 +42,10 @@ export interface Session {
   tokensByModel?: Record<string, Tokens>;
   toolCalls?: number;
   subagentCount?: number;
+  /** Bytes on disk of everything kept for it, as deleting it would free. */
+  diskBytes?: number | null;
+  /** Do not disturb: nothing of it goes out on a channel. */
+  quiet?: boolean;
 }
 
 export interface Subagent {

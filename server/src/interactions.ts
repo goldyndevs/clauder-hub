@@ -150,6 +150,17 @@ export function closeOpen(sessionId: string, by: string, kinds?: InteractionKind
   broadcast("interactions", { sessionId });
 }
 
+/** Put away without an answer: nothing is typed, the session still waits as it did. */
+export function dismissInteraction(id: string): Interaction {
+  const interaction = getInteraction(id);
+  if (!interaction) throw new AnswerError("No such interaction.");
+  if (interaction.status !== "open") return interaction;
+  db.prepare("UPDATE interactions SET status = 'closed', answered_by = 'dismissed', updated_at = ? WHERE id = ?").run(now(), id);
+  void acknowledgeOnChannels(interaction, "Dismissed on the dashboard.");
+  broadcast("interactions", { sessionId: interaction.sessionId });
+  return getInteraction(id)!;
+}
+
 export class AnswerError extends Error {}
 
 /** Option numbers for a question: "2", or "1,3" for several questions. Anything else is a typed answer. */

@@ -140,7 +140,6 @@ function channelParams(): Param[] {
     { name: "kind", type: `"${CHANNEL_KINDS.map((kind) => kind.kind).join('" | "')}"`, required: true, description: "The platform. Cannot change after creation.", example: "slack" },
     { name: "name", type: "string", required: true, description: "Shown in the dashboard.", example: "Team Slack" },
     { name: "enabled", type: "boolean", required: false, description: "Default true.", example: "true" },
-    { name: "kinds", type: "string[]", required: false, description: `What it is sent; any of ${INTERACTION_KINDS.join(", ")}. Default all.`, example: '["permission", "question", "done"]' },
     { name: "config", type: "object", required: true, description: `Per platform. ${fields}`, example: '{ "botToken": "xoxb-...", "appToken": "xapp-...", "channel": "C0123456789" }' },
   ];
 }
@@ -240,8 +239,8 @@ function definitionOf(purpose: Purpose): Definition {
           : "A channel is where sessions reach the person: permission requests, questions, ends of turns, MCP suggestions and finished tasks. Replies there go back into the session.",
         params: channelParams(),
         samples: [
-          { kind: "slack", name: "Team Slack", enabled: true, kinds: ["permission", "question", "turn", "mcp", "done"], config: { botToken: "xoxb-...", appToken: "xapp-...", channel: "C0123456789" } },
-          { kind: "telegram", name: "My phone", enabled: true, kinds: ["permission", "question", "done"], config: { botToken: "123456:ABC-...", chatId: "123456789" } },
+          { kind: "slack", name: "Team Slack", enabled: true, config: { botToken: "xoxb-...", appToken: "xapp-...", channel: "C0123456789" } },
+          { kind: "telegram", name: "My phone", enabled: true, config: { botToken: "123456:ABC-...", chatId: "123456789" } },
         ],
         api: [
           "GET /api/channels (kinds and fields, existing channels with secrets masked as ********)",
@@ -271,7 +270,7 @@ function currentValue(purpose: Purpose): unknown {
     }
     case "edit-channel": {
       const channel = listChannels().find((item) => item.id === purpose.targetId);
-      return channel && { kind: channel.kind, name: channel.name, enabled: channel.enabled, kinds: channel.kinds, config: channel.config };
+      return channel && { kind: channel.kind, name: channel.name, enabled: channel.enabled, config: channel.config };
     }
     default:
       return undefined;

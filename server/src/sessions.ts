@@ -8,7 +8,9 @@ import { claudeSettings, mcpSuggestionsEnabled, PERMISSION_MODES, settingFlags }
 import { db, now, parseJson } from "./db.js";
 import { broadcast } from "./events.js";
 import { projectRoot, runDir } from "./paths.js";
+import { quietSessions } from "./channels/index.js";
 import { renderPrompt } from "./prompts.js";
+import { sessionDiskBytes } from "./sessionFiles.js";
 import { allTerminals, killTerminal, listTerminals, spawnTerminal, terminalForSession, waitForExit, type Terminal } from "./terminals.js";
 import { defaultToolset, normaliseToolset, toolsetSettings, type Toolset } from "./toolset.js";
 import { purposeSystemPrompt, purposeTitle, type Purpose } from "./purposes.js";
@@ -267,6 +269,10 @@ export interface SessionView extends Partial<TranscriptSummary> {
   done: unknown;
   /** Set on a configuration session: what it is for. */
   purpose: (Purpose & { title: string }) | null;
+  /** Bytes on disk of everything kept for it, as deleting it would free. */
+  diskBytes: number | null;
+  /** Do not disturb: nothing of it goes out on a channel. */
+  quiet: boolean;
 }
 
 function purposeOf(row: SessionRow | undefined): SessionView["purpose"] {
@@ -282,6 +288,7 @@ export function listSessions(): SessionView[] {
     ),
   );
   const terminals = new Map(listTerminals().map((terminal) => [terminal.sessionId, terminal]));
+  const quiet = new Set(quietSessions());
   const views: SessionView[] = [];
   const seen = new Set<string>();
 
@@ -312,6 +319,8 @@ export function listSessions(): SessionView[] {
       openInteractions: open.get(id) ?? 0,
       done: parseJson(row?.done_json, null),
       purpose,
+      diskBytes: sessionDiskBytes(id),
+      quiet: quiet.has(id),
     };
   };
 

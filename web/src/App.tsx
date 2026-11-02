@@ -21,6 +21,7 @@ import { FileTabs } from "./components/FileTabs";
 import { TerminalTabs } from "./components/TerminalTabs";
 import { FOCUS_SESSIONS_EVENT, MobileBar, Sidebar } from "./components/Sidebar";
 import { cn } from "./lib/cn";
+import { useOpenFiles } from "./lib/openFiles";
 import { ClaudeBanner } from "./components/ClaudeBanner";
 import { useStore, type Page } from "./lib/store";
 import { useMediaQuery } from "./lib/useMediaQuery";
@@ -92,6 +93,21 @@ export default function App() {
 
   // Going anywhere closes the drawer, and so does growing past md.
   useEffect(() => setDrawer(false), [view, wide]);
+
+  // Closing or reloading the browser tab asks first while a terminal runs or a file is open.
+  // A browser only allows its own dialog here, with its own wording.
+  const running = useStore((state) => state.sessions.some((session) => session.live));
+  const filesOpen = useOpenFiles((state) => state.tabs.length > 0);
+  const busyTab = running || filesOpen;
+  useEffect(() => {
+    if (!busyTab) return;
+    const onLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, [busyTab]);
 
   // Ctrl+` from anywhere, the terminal and the editor included (caught before they see it):
   // the sidebar comes out on its Sessions tab and the live sessions light up.

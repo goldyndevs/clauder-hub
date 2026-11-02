@@ -1,4 +1,4 @@
-import { ArrowUp, ChevronRight, FolderGit2, FolderOpen, Globe, HardDrive, Home, Plus, X } from "lucide-react";
+import { ArrowUp, BellOff, ChevronRight, FolderGit2, FolderOpen, Globe, HardDrive, Home, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -6,6 +6,7 @@ import { ago } from "../lib/format";
 import { GLOBAL_ID } from "../lib/project";
 import { attempt, useLive, useStore } from "../lib/store";
 import type { Folders, ProjectInfo } from "../lib/types";
+import { showNotificationsSwitch } from "./ChannelsPage";
 import { useConfirm } from "./Confirm";
 import { Logo } from "./Logo";
 import { Button } from "./ui/Button";
@@ -216,7 +217,25 @@ export function TitleLink() {
         Clauder Hub
       </button>
       {version && <span className="text-[10px] font-normal leading-tight text-muted-foreground/70">v{version}</span>}
+      <PausedBell />
     </span>
+  );
+}
+
+/** Shown while this project's notifications are paused and it has a channel to pause; a click goes to the switch. */
+function PausedBell() {
+  const projectId = useStore((state) => state.projectId);
+  const channels = useLive(() => api.channels(), ["channels"], projectId);
+  if (!channels.data?.paused || !channels.data.channels.length) return null;
+  return (
+    <button
+      onClick={showNotificationsSwitch}
+      title="Notifications are paused on every channel. Click to turn them back on."
+      aria-label="Notifications paused"
+      className="self-center text-severity-warning hover:text-foreground"
+    >
+      <BellOff size={12} />
+    </button>
   );
 }
 

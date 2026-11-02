@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronRight, HelpCircle, MessageSquare, Plug, ShieldQuestion, SquareTerminal } from "lucide-react";
+import { CheckCircle2, ChevronRight, HelpCircle, MessageSquare, Plug, ShieldQuestion, SquareTerminal, X } from "lucide-react";
 import { useState } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -76,6 +76,11 @@ export function InteractionCard({
   };
   const choose = (choice: Choice) => run(() => (project ? api.chooseIn(project.id, interaction.id, choice.ref) : api.choose(interaction.id, choice.ref)));
   const reply = (value: string) => value.trim() && run(() => (project ? api.answerIn(project.id, interaction.id, value) : api.answer(interaction.id, value)));
+  const dismiss = async () => {
+    setBusy(true);
+    await attempt(() => (project ? api.dismissIn(project.id, interaction.id) : api.dismiss(interaction.id)), "Dismissed.");
+    setBusy(false);
+  };
 
   return (
     <div className={cn("card p-3", open && "border-primary/60")}>
@@ -100,6 +105,12 @@ export function InteractionCard({
             onClick={() => go({ kind: "session", id: interaction.sessionId })}
           >
             <SquareTerminal size={12} /> <span className="hidden sm:inline">Terminal</span>
+          </Button>
+        )}
+        {/* Put away without answering: nothing is typed, the session still waits. */}
+        {open && (
+          <Button variant="ghost" size="icon" className="shrink-0" disabled={busy} title="Dismiss (nothing is sent to the session)" aria-label="Dismiss" onClick={() => void dismiss()}>
+            <X size={13} />
           </Button>
         )}
       </div>
