@@ -452,7 +452,11 @@ function FileMenu({ entry, x, y, onClose }: { entry: FileEntry; x: number; y: nu
       )}
       <div className="my-1 border-t" />
       {item("Cut", Scissors, () => useFileClipboard.getState().set({ mode: "cut", path: entry.path }))}
-      {item("Copy", Copy, () => useFileClipboard.getState().set({ mode: "copy", path: entry.path }))}
+      {item("Copy", Copy, () => {
+        useFileClipboard.getState().set({ mode: "copy", path: entry.path });
+        // Also on the machine's own clipboard, as the file manager's Copy: Ctrl+V in Slack, Teams or a mail attaches it.
+        void attempt(() => filesApi.copyToClipboard(entry.path), "Copied: paste it here, or with Ctrl+V in Slack, Teams or a mail.");
+      })}
       {clipboard && item(`Paste${entry.kind === "dir" ? " into folder" : " here"}`, ClipboardPaste, () => void pasteInto(entry.kind === "dir" ? entry.path : parentOf(entry.path), go, (path) => toggle(path, true)))}
       <div className="my-1 border-t" />
       {item("Copy Path", Link, () => copyText(absolute, "path"))}

@@ -94,8 +94,21 @@ export const useOpenFiles = create<OpenFilesState>((set, get) => {
   };
 });
 
+/** Files opened from a terminal link, with the session whose terminal it was; closing one goes back there. */
+const fromTerminal = new Map<string, string>();
+export function openedFromTerminal(path: string, sessionId: string): void {
+  fromTerminal.set(path, sessionId);
+}
+/** The session a closed file was opened from, if any; asked once, as the file closes. */
+export function takeTerminalOrigin(path: string): string | null {
+  const sessionId = fromTerminal.get(path) ?? null;
+  fromTerminal.delete(path);
+  return sessionId;
+}
+
 /** Shows another project's tabs, as they were left there. */
 export function loadOpenFiles(projectId: string | null): void {
+  fromTerminal.clear();
   key = projectId ? `clauder-hub:open-files:${projectId}` : null;
   useOpenFiles.setState({ tabs: load() });
 }

@@ -3,7 +3,7 @@ import { FileIcon } from "./FileIcon";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { isDirty, useDrafts } from "../lib/fileDrafts";
-import { useOpenFiles } from "../lib/openFiles";
+import { takeTerminalOrigin, useOpenFiles } from "../lib/openFiles";
 import { filesApi } from "../lib/filesApi";
 import { attempt, useStore } from "../lib/store";
 import { useConfirm } from "./Confirm";
@@ -30,10 +30,15 @@ export function useCloseTabs() {
       if (!ok) return;
     }
     for (const path of paths) drop(path);
-    const { view, go } = useStore.getState();
+    const { view, go, sessions } = useStore.getState();
     const shown = view.kind === "file" ? view.path : null;
+    const origins = new Map(paths.map((path) => [path, takeTerminalOrigin(path)]));
     const next = useOpenFiles.getState().close(paths, shown);
-    if (shown && next !== shown) go(next ? { kind: "file", path: next } : { kind: "page", page: "overview" });
+    if (!shown || next === shown) return;
+    // A file opened from a terminal link goes back to that terminal, while its session is still there.
+    const origin = origins.get(shown);
+    if (origin && sessions.some((session) => session.id === origin)) return go({ kind: "session", id: origin });
+    go(next ? { kind: "file", path: next } : { kind: "page", page: "overview" });
   };
 }
 

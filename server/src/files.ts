@@ -384,6 +384,49 @@ export function revealPath(relInput: unknown): Promise<{ path: string }> {
   });
 }
 
+/**
+ * Puts the file itself on the operating system's clipboard, as Ctrl+C in the
+ * file manager does, so Ctrl+V in Slack, Teams or a mail attaches it. It is
+ * the clipboard of the machine running the hub. The path is an argument or an
+ * environment variable, never part of the command text.
+ */
+export function copyFileToClipboard(relInput: unknown): Promise<{ path: string }> {
+  const absolute = resolvePath(relInput);
+  if (!fs.existsSync(absolute)) throw new FileError("No such file or folder.", 404);
+  const run = (command: string, args: string[], env: NodeJS.ProcessEnv = process.env) =>
+    new Promise<{ path: string }>((resolve, reject) => {
+      const child = spawn(command, args, { windowsHide: true, env, stdio: ["ignore", "ignore", "pipe"] });
+      let errorText = "";
+      child.stderr.on("data", (chunk) => (errorText += chunk));
+      child.once("error", (error) => reject(new FileError(`Could not reach the clipboard: ${error.message}`, 409)));
+      child.once("exit", (code) => (code === 0 ? resolve({ path: toRel(absolute) }) : reject(new FileError(`Could not reach the clipboard: ${errorText.trim() || `exit ${code}`}`, 409))));
+    });
+  if (process.platform === "win32") {
+    // Windows PowerShell's Set-Clipboard puts a file drop list, the same thing Explorer's Copy does; it needs STA.
+    return run("powershell.exe", ["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", "Set-Clipboard -LiteralPath $env:CLAUDER_COPY"], {
+      ...process.env,
+      CLAUDER_COPY: absolute,
+    });
+  }
+  if (process.platform === "darwin") {
+    return run("osascript", ["-e", "on run argv", "-e", "set the clipboard to (POSIX file (item 1 of argv))", "-e", "end run", absolute]);
+  }
+  if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+    throw new FileError("There is no desktop session on the machine running the hub, so no clipboard to put the file on.", 409);
+  }
+  // Linux file managers paste a file from a text/uri-list.
+  const uri = `file://${absolute.split("/").map(encodeURIComponent).join("/")}`;
+  return new Promise((resolve, reject) => {
+    const child = spawn("xclip", ["-selection", "clipboard", "-t", "text/uri-list"], { stdio: ["pipe", "ignore", "ignore"], detached: true });
+    child.once("error", (error) => reject(new FileError(`Could not reach the clipboard (is xclip installed?): ${error.message}`, 409)));
+    child.once("spawn", () => {
+      child.stdin.end(`${uri}\n`);
+      child.unref();
+      resolve({ path: toRel(absolute) });
+    });
+  });
+}
+
 /** Deletes a file, or a folder with everything in it. */
 export function deletePath(relInput: unknown): { path: string } {
   const absolute = resolvePath(relInput);

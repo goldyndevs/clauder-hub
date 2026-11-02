@@ -63,6 +63,8 @@ export const filesApi = {
   /** Pastes a copy into a folder; a taken name becomes "name copy". */
   /** Opens the system file manager with this file or folder selected. */
   reveal: (path: string) => send<{ path: string }>("POST", "/reveal", { path }),
+  /** The file itself onto the clipboard of the machine running the hub, to paste into Slack, Teams or a mail. */
+  copyToClipboard: (path: string) => send<{ path: string }>("POST", "/clipboard", { path }),
   copy: (from: string, folder: string) => send<{ path: string }>("POST", "/copy", { from, folder }),
 };
 

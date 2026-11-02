@@ -26,6 +26,7 @@ import {
   Radio,
   Search,
   SlidersHorizontal,
+  Square,
   Sparkles,
   Tags,
   Trash2,
@@ -526,7 +527,7 @@ function SessionMenu({ session, x, y, onClose }: { session: Session; x: number; 
       role="menu"
       className="fixed z-50 w-48 rounded-lg border bg-card p-1 shadow-lg"
       // Kept inside the window when opened near its bottom or right edge.
-      style={{ left: Math.min(x, window.innerWidth - 200), top: Math.min(y, window.innerHeight - 240) }}
+      style={{ left: Math.min(x, window.innerWidth - 200), top: Math.min(y, window.innerHeight - 270) }}
       onPointerDown={(event) => event.stopPropagation()}
     >
       {item("Open", ArrowRight, () => go({ kind: "session", id: session.id }))}
@@ -543,6 +544,7 @@ function SessionMenu({ session, x, y, onClose }: { session: Session; x: number; 
         hint: "Puts away what it waits on, unanswered; nothing is typed into it",
       })}
       <div className="my-1 border-t" />
+      {session.live && item("Stop", Square, () => void actions.stop(session), { hint: "Stops its terminal; the conversation is kept for a later resume" })}
       {item("Delete permanently", Trash2, () => void actions.remove(session), {
         danger: true,
         hint: session.live ? "Stops it first" : undefined,

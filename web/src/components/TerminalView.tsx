@@ -6,7 +6,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 import { filesApi } from "../lib/filesApi";
-import { useOpenFiles } from "../lib/openFiles";
+import { openedFromTerminal, useOpenFiles } from "../lib/openFiles";
 import { useStore } from "../lib/store";
 
 /** A path with a folder in it and a file name with an extension, optionally :line[:col]; absolute (C:\ or /) or relative. */
@@ -64,13 +64,16 @@ function pathsIn(text: string): Array<{ index: number; text: string }> {
   return found;
 }
 
-/** Ctrl (Cmd on a Mac) and click, as in a desktop terminal: the file opens in the hub's editor. */
-function openLink(event: MouseEvent, link: string): boolean {
+/** Ctrl (Cmd on a Mac) and click, as in a desktop terminal: the file opens in the hub's editor; closing it comes back here. */
+function openLink(event: MouseEvent, link: string, terminalId: string): boolean {
   if (!event.ctrlKey && !event.metaKey) return false;
   const path = projectPath(link);
   if (!path) return false;
+  const { sessions, go } = useStore.getState();
+  const session = sessions.find((item) => item.terminalId === terminalId);
+  if (session) openedFromTerminal(path, session.id);
   useOpenFiles.getState().pin(path);
-  useStore.getState().go({ kind: "file", path });
+  go({ kind: "file", path });
   return true;
 }
 
@@ -99,7 +102,7 @@ export function TerminalView({ terminalId, onExit }: { terminalId: string; onExi
         allowNonHttpProtocols: true,
         activate: (event, uri) => {
           if (/^https?:/i.test(uri)) window.open(uri, "_blank", "noopener");
-          else openLink(event, uri);
+          else openLink(event, uri, terminalId);
         },
       },
       theme: {
@@ -124,7 +127,7 @@ export function TerminalView({ terminalId, onExit }: { terminalId: string; onExi
             .map((item) => ({
               text: item.text,
               range: { start: { x: item.index + 1, y }, end: { x: item.index + item.text.length, y } },
-              activate: (event: MouseEvent, link: string) => void openLink(event, link),
+              activate: (event: MouseEvent, link: string) => void openLink(event, link, terminalId),
             }));
           callback(links.length ? links : undefined);
         });

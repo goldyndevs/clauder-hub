@@ -5,10 +5,13 @@ import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
 import type { Session } from "../lib/types";
 import { useConfirm } from "./Confirm";
-import { useSessionActions } from "./SessionActions";
+import { focusNeighbourTerminal, useSessionActions } from "./SessionActions";
 import { StatusDot } from "./Sidebar";
 
-function TabMenu({ x, y, items, onClose }: { x: number; y: number; items: Array<[string, typeof X, () => void, boolean?]>; onClose: () => void }) {
+/** label, icon, action, separated from the items above, disabled */
+type MenuItem = [string, typeof X, () => void, boolean?, boolean?];
+
+function TabMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose: () => void }) {
   useEffect(() => {
     const close = () => onClose();
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
@@ -26,14 +29,18 @@ function TabMenu({ x, y, items, onClose }: { x: number; y: number; items: Array<
       style={{ left: Math.min(x, window.innerWidth - 184), top: Math.min(y, window.innerHeight - 180) }}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      {items.map(([label, Icon, run, separated]) => (
+      {items.map(([label, Icon, run, separated, disabled]) => (
         <button
           key={label}
+          disabled={disabled}
           onClick={() => {
             onClose();
             run();
           }}
-          className={cn("flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted", separated && "mt-1 border-t pt-2")}
+          className={cn(
+            "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+            separated && "mt-1 border-t pt-2",
+          )}
         >
           <Icon size={13} />
           {label}
@@ -68,14 +75,7 @@ export function TerminalTabs() {
 
   if (!live.length) return null;
 
-  const stop = (session: Session) =>
-    confirm({
-      title: `Stop "${session.title}"?`,
-      description: "The conversation is kept for a later resume.",
-      confirmLabel: "Stop",
-      tone: "destructive",
-      run: () => api.killSession(session.id),
-    });
+  const stop = (session: Session) => actions.stop(session);
 
   const stopMany = (targets: Session[], all: boolean) =>
     confirm({
@@ -86,6 +86,7 @@ export function TerminalTabs() {
       tone: "destructive",
       run: async () => {
         await Promise.all(targets.map((session) => api.killSession(session.id)));
+        focusNeighbourTerminal(targets.map((session) => session.id));
       },
     });
 
@@ -100,9 +101,7 @@ export function TerminalTabs() {
             ["Open", ArrowRight, () => go({ kind: "session", id: menu.session.id })],
             ["Rename", Pencil, () => void actions.rename(menu.session)],
             ["Close", X, () => void stop(menu.session), true],
-            ...(live.length > 1
-              ? [["Close Others", XCircle, () => void stopMany(live.filter((session) => session.id !== menu.session.id), false)] as [string, typeof X, () => void]]
-              : []),
+            ["Close Others", XCircle, () => void stopMany(live.filter((session) => session.id !== menu.session.id), false), false, live.length < 2],
             ["Close All", XCircle, () => void stopMany(live, true)],
           ]}
         />

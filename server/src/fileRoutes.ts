@@ -1,6 +1,6 @@
 import express from "express";
 import { blameFile, commitDetails } from "./blame.js";
-import { FileError, copyPath, revealPath, createFile, createFolder, deletePath, listFolder, readText, renamePath, resolvePath, statFile, writeText } from "./files.js";
+import { FileError, copyFileToClipboard, copyPath, revealPath, createFile, createFolder, deletePath, listFolder, readText, renamePath, resolvePath, statFile, writeText } from "./files.js";
 
 /** The Files tab: /api/files. Every path is relative to the project root; files.ts checks it. */
 export const fileRoutes = express.Router();
@@ -60,4 +60,5 @@ fileRoutes.post("/mkdir", wrap((req) => createFolder(req.body?.path)));
 fileRoutes.post("/rename", wrap((req) => renamePath(req.body?.from, req.body?.to)));
 fileRoutes.post("/delete", wrap((req) => deletePath(req.body?.path)));
 fileRoutes.post("/reveal", wrapAsync((req) => revealPath(req.body?.path)));
+fileRoutes.post("/clipboard", wrapAsync((req) => copyFileToClipboard(req.body?.path)));
 fileRoutes.post("/copy", wrap((req) => copyPath(req.body?.from, req.body?.folder ?? "")));

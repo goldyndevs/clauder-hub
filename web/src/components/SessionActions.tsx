@@ -27,7 +27,22 @@ function TempChoice({ temp, choice }: { temp: { path: string; bytes: number }; c
   );
 }
 
-/** Rename and delete, shared by the session header and the sidebar's right-click menu. */
+/**
+ * After terminals stop: if the one on screen was among them, the terminal tab
+ * before it takes its place (the one after, when it was first), as closing an
+ * editor tab does. With no terminal left running the stopped session stays.
+ */
+export function focusNeighbourTerminal(stopped: string[]): void {
+  const { view, sessions, go } = useStore.getState();
+  if (view.kind !== "session" || !stopped.includes(view.id)) return;
+  const live = sessions.filter((session) => session.live || session.id === view.id);
+  const index = live.findIndex((session) => session.id === view.id);
+  const keep = (session: Session) => !stopped.includes(session.id);
+  const next = live.slice(0, Math.max(index, 0)).reverse().find(keep) ?? live.slice(index + 1).find(keep);
+  if (next) go({ kind: "session", id: next.id });
+}
+
+/** Rename, stop and delete, shared by the session header and the sidebar's right-click menu. */
 export function useSessionActions() {
   const confirm = useConfirm();
   const name = useRef("");
@@ -107,5 +122,17 @@ export function useSessionActions() {
     return deleted;
   };
 
-  return { rename, remove };
+  const stop = (session: Session) =>
+    confirm({
+      title: `Stop "${session.title}"?`,
+      description: "The conversation is kept for a later resume.",
+      confirmLabel: "Stop",
+      tone: "destructive",
+      run: async () => {
+        await api.killSession(session.id);
+        focusNeighbourTerminal([session.id]);
+      },
+    });
+
+  return { rename, remove, stop };
 }

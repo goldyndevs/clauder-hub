@@ -8,7 +8,7 @@ import type { Interaction, SessionDetail } from "../lib/types";
 import { Activity } from "./Activity";
 import { useConfirm } from "./Confirm";
 import { InteractionCard } from "./InteractionCard";
-import { useSessionActions } from "./SessionActions";
+import { focusNeighbourTerminal, useSessionActions } from "./SessionActions";
 import { SessionSetup } from "./SessionSetup";
 import { SessionToolset } from "./SessionToolset";
 import { StatusDot } from "./Sidebar";
@@ -79,7 +79,10 @@ export function SessionView({ id }: { id: string }) {
       description: "The conversation is kept for a later resume.",
       confirmLabel: "Stop",
       tone: "destructive",
-      run: () => api.killSession(id),
+      run: async () => {
+        await api.killSession(id);
+        focusNeighbourTerminal([id]);
+      },
     });
 
   return (
