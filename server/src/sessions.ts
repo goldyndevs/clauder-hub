@@ -69,6 +69,9 @@ export function renameSession(from: string, to: string): void {
     db.prepare("UPDATE channel_threads SET session_id = ? WHERE session_id = ?").run(to, from);
     db.prepare("UPDATE channel_refs SET session_id = ? WHERE session_id = ?").run(to, from);
     db.prepare("UPDATE mcp_suggestions SET session_id = ? WHERE session_id = ?").run(to, from);
+    // The panel follows the terminal to its new conversation, in the same place.
+    const open = openSessionIds();
+    if (open.includes(from)) saveOpenSessions(open.includes(to) ? open.filter((id) => id !== from) : open.map((id) => (id === from ? to : id)));
   })();
   broadcast("sessions", {});
 }
@@ -219,7 +222,39 @@ export function startSession(options: StartOptions): Terminal {
        run_id = COALESCE(excluded.run_id, sessions.run_id), updated_at = excluded.updated_at`,
   ).run(sessionId, existing?.origin ?? options.origin ?? "manual", options.runId ?? null, category, JSON.stringify(toolset), purpose ? JSON.stringify(purpose) : null, stamp, stamp);
 
+  openSessionsAdd(sessionId);
   return spawnTerminal({ file: claude, args, sessionId, token, cols: options.cols, rows: options.rows });
+}
+
+/**
+ * The sessions open in the live panel, in the order they came, kept in the
+ * project's database so they are still there after the hub or the machine
+ * restarts. A session joins when its terminal starts and leaves only when it
+ * is closed from the panel; one that stops on its own stays, shown stopped.
+ */
+export function openSessionIds(): string[] {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'openSessions'").get() as { value: string } | undefined;
+  const ids = parseJson<unknown>(row?.value, []);
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}
+function saveOpenSessions(ids: string[]): void {
+  db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('openSessions', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").run(
+    JSON.stringify(ids),
+    now(),
+  );
+}
+export function openSessionsAdd(id: string): void {
+  const ids = openSessionIds();
+  if (!ids.includes(id)) saveOpenSessions([...ids, id]);
+}
+/** Closed from the panel: off the list, and stopped first when it is running. */
+export function closeOpenSessions(ids: string[]): void {
+  for (const id of ids) {
+    const terminal = terminalForSession(id);
+    if (terminal) killTerminal(terminal);
+  }
+  saveOpenSessions(openSessionIds().filter((id) => !ids.includes(id)));
+  broadcast("sessions", {});
 }
 
 /**

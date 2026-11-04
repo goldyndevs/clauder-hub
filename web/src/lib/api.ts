@@ -82,6 +82,9 @@ export const api = {
   globalOverview: () => hubRequest<GlobalProject[]>("/global/overview"),
   globalInbox: () => hubRequest<GlobalInboxItem[]>("/global/inbox"),
   globalLive: () => hubRequest<LiveProject[]>("/global/live"),
+  /** Off the live panel's list, the running ones stopped. */
+  closeOpenSessions: (projectId: string, ids: string[]) =>
+    call(`/api/p/${encodeURIComponent(projectId)}/open-sessions/close`, { method: "POST", body: JSON.stringify({ ids }) }),
   /** A plain session in any project, not only the open one (the live panel). */
   startSessionIn: (projectId: string, size: TerminalSize) =>
     call<{ sessionId: string; terminalId: string }>(`/api/p/${encodeURIComponent(projectId)}/sessions`, { method: "POST", body: JSON.stringify(size) }),

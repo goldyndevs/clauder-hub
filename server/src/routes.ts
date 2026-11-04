@@ -18,7 +18,7 @@ import { currentProject, withProject } from "./context.js";
 import { projectRoot, runDir, toolVersion, transcriptsDir } from "./paths.js";
 import { addProject, allProjects, getProject, listProjects, removeProject, touchProject } from "./projects.js";
 import { promptDefinitions, renderPrompt, setPrompt } from "./prompts.js";
-import { getSessionRow, hubUrl, listSessions, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
+import { closeOpenSessions, getSessionRow, hubUrl, listSessions, openSessionIds, openSessionsAdd, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
 import { killTerminal, terminalForSession } from "./terminals.js";
 import { isPurpose, purposeNote, purposeTitle } from "./purposes.js";
 import { deleteSession, deletionPlan, setSessionTitle } from "./sessionFiles.js";
@@ -144,8 +144,9 @@ hubApi.get(
 );
 
 /**
- * The projects with a live session, for the live panel beside every page:
- * those sessions, and the latest ended ones to resume, in each.
+ * The sessions open in the live panel, per project: those running and those
+ * kept from before (stopped, a restart ago), in the order they were opened,
+ * with the latest other sessions to resume.
  */
 hubApi.get(
   "/global/live",
@@ -153,22 +154,27 @@ hubApi.get(
     const muted = new Set(mutedProjects());
     return acrossProjects((info) => {
       const sessions = listSessions();
+      // A terminal started before the list was kept joins it here.
+      for (const session of sessions) if (session.live) openSessionsAdd(session.id);
+      const byId = new Map(sessions.map((session) => [session.id, session]));
       const pick = (session: (typeof sessions)[number]) => ({
         id: session.id,
         title: session.title,
         status: session.status,
+        live: session.live,
         openInteractions: session.openInteractions,
         lastAt: session.lastAt ?? null,
       });
-      const live = sessions.filter((session) => session.live);
+      // A session whose transcript is gone has nothing to show or resume.
+      const open = openSessionIds().flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
       const recent = sessions
-        .filter((session) => !session.live && session.lastAt)
+        .filter((session) => !session.live && session.lastAt && !open.includes(session))
         .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""))
         .slice(0, 8);
       // root, muted and paused for the project's right-click menu, the same as on its card.
-      return { id: info.id, name: info.name, root: info.root, muted: muted.has(info.id), paused: notificationsPaused(), live: live.map(pick), recent: recent.map(pick) };
+      return { id: info.id, name: info.name, root: info.root, muted: muted.has(info.id), paused: notificationsPaused(), open: open.map(pick), recent: recent.map(pick) };
     })
-      .filter((project) => project.live.length)
+      .filter((project) => project.open.length)
       // By name, so a group stays where it was when another project is opened.
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }),
@@ -323,6 +329,15 @@ api.post(
   }),
 );
 
+/** Closed from the live panel: stopped when running, and off its list. */
+api.post(
+  "/open-sessions/close",
+  wrap((req) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((id: unknown): id is string => typeof id === "string") : [];
+    closeOpenSessions(ids);
+    return { closed: ids.length };
+  }),
+);
 api.post(
   "/sessions/:id/kill",
   wrap((req) => {

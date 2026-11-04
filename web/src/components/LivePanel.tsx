@@ -59,27 +59,34 @@ function Dot({ status }: { status: LiveSession["status"] }) {
     <span
       className={cn(
         "inline-block h-2 w-2 shrink-0 rounded-full",
-        status === "waiting" ? "bg-severity-warning animate-status-pulse" : status === "running" ? "bg-success animate-status-pulse" : "bg-muted-foreground/40",
+        status === "waiting"
+          ? "bg-severity-warning animate-status-pulse"
+          : status === "running"
+            ? "bg-success animate-status-pulse"
+            : status === "done"
+              ? "border border-success bg-transparent"
+              : "bg-muted-foreground/40",
       )}
     />
   );
 }
 
 /**
- * Every project's live sessions, grouped by project, beside whatever page is
- * open: a click switches to the session (and its project), and each project
- * can start a new session or resume a recent one from here.
+ * Every project's open sessions, grouped by project, beside whatever page is
+ * open: a click switches to the session (and its project, resuming it when it
+ * stopped), and each project can start a new session or resume a recent one.
+ * The list is the hub's (sessions.ts), so it outlives a restart.
  */
 export function LivePanel({ width }: { width: number }) {
   const toggle = useLivePanel((state) => state.toggle);
   const live = useLive(() => api.globalLive(), ["projects", "sessions", "interactions", "channels"]);
   const projects = live.data ?? [];
-  const count = projects.reduce((total, project) => total + project.live.length, 0);
+  const count = projects.reduce((total, project) => total + project.open.length, 0);
 
   return (
     <aside aria-label="Live sessions" style={{ width }} className="flex shrink-0 flex-col border-l bg-background">
       <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
-        <span className="text-xs font-semibold">Live sessions</span>
+        <span className="text-xs font-semibold">Open sessions</span>
         <span className="grid h-4 min-w-[1rem] place-items-center rounded-full bg-muted px-1 text-[10px] font-semibold leading-none tabular-nums text-muted-foreground">{count}</span>
         <div className="flex-1" />
         <Button variant="ghost" size="icon" onClick={toggle} title="Hide this panel" aria-label="Hide live sessions">
@@ -87,7 +94,7 @@ export function LivePanel({ width }: { width: number }) {
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
-        {live.data && !projects.length && <p className="px-3 py-4 text-xs text-muted-foreground">Nothing is running in any project.</p>}
+        {live.data && !projects.length && <p className="px-3 py-4 text-xs text-muted-foreground">No session is open in any project.</p>}
         {projects.map((project) => (
           <ProjectGroup key={project.id} project={project} />
         ))}
@@ -109,19 +116,36 @@ function ProjectGroup({ project }: { project: LiveProject }) {
   const confirm = useConfirm();
   const here = projectId === project.id;
 
-  // The terminal tabs' menu, for this project's live sessions.
-  const stopMany = (targets: LiveSession[], all: boolean) =>
-    confirm({
-      title: `Stop ${all ? "all " : ""}${targets.length} ${all ? "running" : "other"} terminal${targets.length > 1 ? "s" : ""} in ${project.name}?`,
-      description: "Their conversations are kept for a later resume.",
-      body: <div className="space-y-0.5 text-[11px] text-muted-foreground">{targets.map((session) => <div key={session.id} className="truncate">{session.title}</div>)}</div>,
-      confirmLabel: all ? "Stop all" : "Stop others",
+  /**
+   * Off the panel's list. A running one stops too, so that asks first; a
+   * stopped one just goes, there being nothing to stop.
+   */
+  const close = (targets: LiveSession[], what: string) => {
+    if (!targets.length) return;
+    const run = async () => {
+      await api.closeOpenSessions(project.id, targets.map((session) => session.id));
+      if (here) focusNeighbourTerminal(targets.filter((session) => session.live).map((session) => session.id));
+    };
+    const running = targets.filter((session) => session.live).length;
+    if (!running) return void attempt(run);
+    return confirm({
+      title: targets.length === 1 ? `Close "${targets[0].title}"?` : `Close ${what} in ${project.name}?`,
+      description: `${running === 1 ? "Its terminal stops" : `${running} terminals stop`}; the conversation${targets.length > 1 ? "s are" : " is"} kept for a later resume.`,
+      body:
+        targets.length > 1 ? (
+          <div className="space-y-0.5 text-[11px] text-muted-foreground">
+            {targets.map((session) => (
+              <div key={session.id} className="truncate">
+                {session.title}
+              </div>
+            ))}
+          </div>
+        ) : undefined,
+      confirmLabel: "Close",
       tone: "destructive",
-      run: async () => {
-        await Promise.all(targets.map((session) => api.killSession(session.id, here ? undefined : project.id)));
-        if (here) focusNeighbourTerminal(targets.map((session) => session.id));
-      },
+      run,
     });
+  };
 
   // Sized to the area the terminal will fill, so the TUI does not redraw at another width when the page attaches.
   const newSession = async () => {
@@ -186,18 +210,31 @@ function ProjectGroup({ project }: { project: LiveProject }) {
           <Plus size={12} />
         </Button>
       </div>
-      {project.live.map((session) => {
+      {project.open.map((session) => {
         const current = here && view.kind === "session" && view.id === session.id;
+        const open = () => openSessionIn(project.id, session.id);
         return (
-          <button
+          // A row with its own close button inside, so not a <button> itself.
+          <div
             key={session.id}
-            onClick={() => openSessionIn(project.id, session.id)}
+            role="button"
+            tabIndex={0}
+            onClick={open}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              open();
+            }}
             onContextMenu={(event) => {
               event.preventDefault();
               setMenu({ session, x: event.clientX, y: event.clientY });
             }}
-            title={session.title}
-            className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs", current ? "bg-primary/15 text-foreground" : "hover:bg-muted")}
+            title={session.live ? session.title : `${session.title} (stopped; opening it resumes it)`}
+            className={cn(
+              "group/row flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs",
+              current ? "bg-primary/15 text-foreground" : "hover:bg-muted",
+              !session.live && !current && "text-muted-foreground",
+            )}
           >
             <Dot status={session.status} />
             <span className="min-w-0 flex-1 truncate">{session.title}</span>
@@ -206,7 +243,18 @@ function ProjectGroup({ project }: { project: LiveProject }) {
                 {session.openInteractions}
               </span>
             )}
-          </button>
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                void close([session], "it");
+              }}
+              title={session.live ? "Close: stops its terminal, after asking" : "Close"}
+              aria-label={`Close ${session.title}`}
+              className="invisible grid h-4 w-4 shrink-0 place-items-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground group-hover/row:visible group-focus-within/row:visible"
+            >
+              <X size={12} />
+            </button>
+          </div>
         );
       })}
       {menu && (
@@ -217,9 +265,9 @@ function ProjectGroup({ project }: { project: LiveProject }) {
           items={[
             ["Open", ArrowRight, () => openSessionIn(project.id, menu.session.id)],
             ["Rename", Pencil, () => void actions.rename(menu.session, project.id)],
-            ["Close", X, () => void actions.stop(menu.session, project.id), true],
-            ["Close Others", XCircle, () => void stopMany(project.live.filter((session) => session.id !== menu.session.id), false), false, project.live.length < 2],
-            ["Close All", XCircle, () => void stopMany(project.live, true)],
+            ["Close", X, () => void close([menu.session], "it"), true],
+            ["Close Others", XCircle, () => void close(project.open.filter((session) => session.id !== menu.session.id), "the others"), false, project.open.length < 2],
+            ["Close All", XCircle, () => void close(project.open, "all")],
           ]}
         />
       )}

@@ -283,6 +283,8 @@ export interface LiveSession {
   id: string;
   title: string;
   status: Session["status"];
+  /** Its terminal is running; the panel also keeps stopped ones until they are closed there. */
+  live: boolean;
   openInteractions: number;
   lastAt: string | null;
 }
@@ -294,7 +296,8 @@ export interface LiveProject {
   root: string;
   muted: boolean;
   paused: boolean;
-  live: LiveSession[];
+  /** Open in the live panel, in the order they were opened. */
+  open: LiveSession[];
   recent: LiveSession[];
 }
 
