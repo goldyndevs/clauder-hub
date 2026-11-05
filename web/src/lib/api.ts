@@ -13,6 +13,7 @@ import type {
   Interaction,
   Inventory,
   Job,
+  ParamValues,
   MemoryFile,
   CatalogItem,
   McpCatalogEntry,
@@ -164,7 +165,7 @@ export const api = {
   saveJob: (job: Partial<Job> & { name: string; kind: Job["kind"]; prompt: string }) => (job.id ? put<Job>(`/jobs/${job.id}`, job) : post<Job>("/jobs", job)),
   deleteJob: (id: string) => del(`/jobs/${id}`),
   rotateJobToken: (id: string) => post<Job>(`/jobs/${id}/rotate`),
-  runJob: (id: string) => post(`/jobs/${id}/run`, {}),
+  runJob: (id: string, params?: ParamValues) => post(`/jobs/${id}/run`, { params }),
 
   runs: () => request<Run[]>("/runs"),
   queueRun: (prompt: string, category: string) => post("/runs", { prompt, category }),

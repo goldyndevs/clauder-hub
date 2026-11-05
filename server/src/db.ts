@@ -201,6 +201,9 @@ CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status, created_at);
   // A stopped run queued again to resume its own session (1), and when it joined the queue (its place in line).
   ensureColumn("runs", "resume", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn("runs", "queued_at", "TEXT");
+  // A job's parameters, as JSON [{ name, label, type, default, description }], and the values a run used.
+  ensureColumn("jobs", "params", "TEXT");
+  ensureColumn("runs", "params", "TEXT");
 }
 
 export function now(): string {

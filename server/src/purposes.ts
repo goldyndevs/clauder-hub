@@ -105,6 +105,14 @@ const JOB_PARAMS: Param[] = [
   },
   { name: "category", type: "string", required: false, description: '"auto" (Claude picks) or a task category name; decides what the run must deliver before it closes. Default "auto".', example: "bugfix" },
   { name: "presetId", type: "string | null", required: false, description: "Toolset preset id from GET /api/presets; null uses the default preset.", example: "null" },
+  {
+    name: "params",
+    type: "array",
+    required: false,
+    description:
+      'Values the prompt takes as {{name}}: [{ name, label?, type: "number" | "string" | "boolean", default, description? }]. Run now asks for them (defaults filled in), cron runs use the defaults, POST /api/jobs/<id>/run and the webhook take {"params": {...}}; a wrong type is refused. Left out on a PUT, the job keeps its params; [] clears them.',
+    example: '[{ "name": "count", "label": "Episodes", "type": "number", "default": 5 }]',
+  },
   { name: "enabled", type: "boolean", required: false, description: "Default true.", example: "true" },
 ];
 
@@ -258,7 +266,7 @@ function currentValue(purpose: Purpose): unknown {
   switch (purpose.kind) {
     case "edit-job": {
       const job = getJob(purpose.targetId);
-      return job && { name: job.name, kind: job.kind, schedule: job.schedule, prompt: job.prompt, category: job.category, presetId: job.presetId, enabled: job.enabled };
+      return job && { name: job.name, kind: job.kind, schedule: job.schedule, prompt: job.prompt, category: job.category, presetId: job.presetId, params: job.params, enabled: job.enabled };
     }
     case "edit-category": {
       const category = listCategories().find((item) => item.id === purpose.targetId);

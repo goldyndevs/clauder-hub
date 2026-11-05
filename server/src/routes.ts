@@ -526,7 +526,7 @@ api.post(
   wrap((req) => {
     const job = getJob(req.params.id);
     if (!job) throw new Error("No such job.");
-    return enqueue({ job, source: "manual", payload: req.body?.payload ?? {} });
+    return enqueue({ job, source: "manual", payload: req.body?.payload ?? {}, params: req.body?.params });
   }),
 );
 
@@ -544,7 +544,7 @@ api.post(
       res.status(409).json({ error: "This trigger is disabled." });
       return;
     }
-    const { run, position } = enqueue({ job, source: "webhook", payload: req.body ?? {} });
+    const { run, position } = enqueue({ job, source: "webhook", payload: req.body ?? {}, params: req.body?.params });
     return { runId: run.id, status: run.status, position };
   }),
 );

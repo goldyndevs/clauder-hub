@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { ClaudeMissing } from "./claudeCode.js";
 import { claudeSettings } from "./claudeSettings.js";
 import { bindProject, currentProject } from "./context.js";
-import { db, now } from "./db.js";
+import { db, now, parseJson } from "./db.js";
 import { broadcast } from "./events.js";
 import { promptText, render } from "./prompts.js";
 import { getSessionRow, setSessionStatus, startSession } from "./sessions.js";
@@ -17,6 +17,17 @@ import { getPreset } from "./toolset.js";
  * checkout. A run ends when its session reports done (see hooks.ts) or its
  * terminal exits.
  */
+/** A value a job's prompt takes as {{name}}, given when it is run; cron runs use the default. */
+export interface JobParam {
+  name: string;
+  label?: string;
+  type: "number" | "string" | "boolean";
+  default: number | string | boolean;
+  description?: string;
+}
+
+export type ParamValues = Record<string, number | string | boolean>;
+
 export interface Job {
   id: string;
   name: string;
@@ -26,6 +37,7 @@ export interface Job {
   category: string;
   /** The toolset preset its runs start with; null is the default preset. */
   presetId: string | null;
+  params: JobParam[];
   token: string;
   enabled: boolean;
   lastRunAt: string | null;
@@ -44,6 +56,8 @@ export interface Run {
   sessionId: string | null;
   /** Queued again to carry on its own session (Resume), rather than to start a new one. */
   resume: boolean;
+  /** The job's parameter values this run used, defaults filled in; null for a run without a job or params. */
+  params: ParamValues | null;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -59,6 +73,7 @@ interface JobRow {
   token: string;
   enabled: number;
   preset_id: string | null;
+  params: string | null;
   last_run_at: string | null;
   created_at: string;
 }
@@ -75,6 +90,7 @@ const toJob = (row: JobRow): Job => ({
   prompt: row.prompt,
   category: row.category,
   presetId: row.preset_id,
+  params: parseJson<JobParam[]>(row.params, []),
   token: row.token,
   enabled: Boolean(row.enabled),
   lastRunAt: row.last_run_at,
@@ -91,7 +107,57 @@ export function getJob(id: string): Job | null {
   return row ? toJob(row) : null;
 }
 
-export function saveJob(input: { id?: string; name: string; kind: Job["kind"]; schedule?: string; prompt: string; category?: string; presetId?: string | null; enabled?: boolean }): Job {
+const PARAM_TYPES = ["number", "string", "boolean"];
+const RESERVED = ["now", "payload"];
+
+/** Checks a job's parameter list; throws what is wrong with it. */
+function checkParams(input: unknown): JobParam[] {
+  if (input == null) return [];
+  if (!Array.isArray(input)) throw new Error("params is a list of { name, label?, type, default, description? }.");
+  const seen = new Set<string>();
+  return input.map((item: any) => {
+    const name = String(item?.name ?? "").trim();
+    if (!/^[A-Za-z_]\w*$/.test(name)) throw new Error(`Parameter name '${name}' must be letters, digits and _, not starting with a digit.`);
+    if (RESERVED.includes(name)) throw new Error(`Parameter name '${name}' is reserved.`);
+    if (seen.has(name)) throw new Error(`Parameter '${name}' is listed twice.`);
+    seen.add(name);
+    if (!PARAM_TYPES.includes(item.type)) throw new Error(`Parameter '${name}': type is number, string or boolean.`);
+    const fallback = item.type === "number" ? 0 : item.type === "boolean" ? false : "";
+    const param: JobParam = { name, type: item.type, default: coerce({ name, type: item.type } as JobParam, item.default ?? fallback) };
+    if (item.label) param.label = String(item.label);
+    if (item.description) param.description = String(item.description);
+    return param;
+  });
+}
+
+/** One value as its parameter's type; throws when it is not one. */
+function coerce(param: JobParam, value: unknown): number | string | boolean {
+  if (param.type === "number") {
+    const number = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+    if (!Number.isFinite(number)) throw new Error(`Parameter '${param.name}' must be a number, got ${JSON.stringify(value)}.`);
+    return number;
+  }
+  if (param.type === "boolean") {
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+    throw new Error(`Parameter '${param.name}' must be true or false, got ${JSON.stringify(value)}.`);
+  }
+  if (typeof value === "object" && value !== null) throw new Error(`Parameter '${param.name}' must be a string.`);
+  return String(value);
+}
+
+/** Every parameter of the job: the value given, else its default. Unknown names are refused. */
+export function resolveParams(job: Job, given: unknown): ParamValues {
+  if (given != null && (typeof given !== "object" || Array.isArray(given))) throw new Error("params is an object of name: value.");
+  const values = (given ?? {}) as Record<string, unknown>;
+  const unknown = Object.keys(values).filter((name) => !job.params.some((param) => param.name === name));
+  if (unknown.length) throw new Error(`Unknown parameter${unknown.length > 1 ? "s" : ""}: ${unknown.join(", ")}. This job takes: ${job.params.map((p) => p.name).join(", ") || "none"}.`);
+  const result: ParamValues = {};
+  for (const param of job.params) result[param.name] = values[param.name] == null ? param.default : coerce(param, values[param.name]);
+  return result;
+}
+
+export function saveJob(input: { id?: string; name: string; kind: Job["kind"]; schedule?: string; prompt: string; category?: string; presetId?: string | null; params?: unknown; enabled?: boolean }): Job {
   if (!input.name.trim()) throw new Error("A job needs a name.");
   if (!input.prompt.trim()) throw new Error("A job needs a prompt.");
   if (input.kind !== "cron" && input.kind !== "webhook") throw new Error("A job is either cron or webhook.");
@@ -104,12 +170,15 @@ export function saveJob(input: { id?: string; name: string; kind: Job["kind"]; s
     }
   }
   const id = input.id ?? nanoid(10);
-  const token = (getJob(id)?.token ?? nanoid(32)) as string;
+  const existing = getJob(id);
+  // Left out on an edit, the job keeps its parameters; [] clears them.
+  const params = input.params === undefined && existing ? existing.params : checkParams(input.params);
+  const token = (existing?.token ?? nanoid(32)) as string;
   db.prepare(
-    `INSERT INTO jobs (id, name, kind, schedule, prompt, category, preset_id, token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO jobs (id, name, kind, schedule, prompt, category, preset_id, params, token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, schedule = excluded.schedule, prompt = excluded.prompt,
-       category = excluded.category, preset_id = excluded.preset_id, enabled = excluded.enabled, updated_at = excluded.updated_at`,
-  ).run(id, input.name.trim(), input.kind, schedule, input.prompt, input.category ?? "auto", input.presetId || null, token, input.enabled === false ? 0 : 1, now(), now());
+       category = excluded.category, preset_id = excluded.preset_id, params = excluded.params, enabled = excluded.enabled, updated_at = excluded.updated_at`,
+  ).run(id, input.name.trim(), input.kind, schedule, input.prompt, input.category ?? "auto", input.presetId || null, JSON.stringify(params), token, input.enabled === false ? 0 : 1, now(), now());
   schedule_(id);
   broadcast("jobs", {});
   return getJob(id)!;
@@ -161,9 +230,10 @@ export function stopScheduler(): void {
   }
 }
 
-/** {{payload}} is the whole body as JSON, {{payload.a.b}} one value in it, {{now}} the time. */
-function renderJobPrompt(template: string, payload: unknown): string {
+/** {{payload}} is the whole body as JSON, {{payload.a.b}} one value in it, {{now}} the time, {{name}} a job parameter. */
+function renderJobPrompt(template: string, payload: unknown, params: ParamValues): string {
   const values: Record<string, string> = { now: now(), payload: JSON.stringify(payload ?? {}, null, 2) };
+  for (const [name, value] of Object.entries(params)) values[name] = String(value);
   const walk = (value: unknown, prefix: string) => {
     if (value && typeof value === "object" && !Array.isArray(value)) {
       for (const [key, inner] of Object.entries(value)) walk(inner, `${prefix}.${key}`);
@@ -183,6 +253,7 @@ interface RunRow {
   status: Run["status"];
   session_id: string | null;
   resume: number;
+  params: string | null;
   created_at: string;
   queued_at: string | null;
   started_at: string | null;
@@ -200,6 +271,7 @@ const toRun = (row: RunRow): Run => ({
   status: row.status,
   sessionId: row.session_id,
   resume: Boolean(row.resume),
+  params: parseJson<ParamValues | null>(row.params, null),
   createdAt: row.created_at,
   startedAt: row.started_at,
   finishedAt: row.finished_at,
@@ -213,16 +285,19 @@ export function listRuns(limit = 100): Run[] {
   ).map(toRun);
 }
 
-export function enqueue(input: { job?: Job; source: Run["source"]; payload?: unknown; prompt?: string; category?: string }): { run: Run; position: number } {
-  const prompt = input.job ? renderJobPrompt(input.job.prompt, input.payload) : (input.prompt ?? "");
+/** params are the job's parameter values; any left out take their default, a wrong type throws. */
+export function enqueue(input: { job?: Job; source: Run["source"]; payload?: unknown; params?: unknown; prompt?: string; category?: string }): { run: Run; position: number } {
+  const params = input.job ? resolveParams(input.job, input.params) : {};
+  const prompt = input.job ? renderJobPrompt(input.job.prompt, input.payload, params) : (input.prompt ?? "");
   if (!prompt.trim()) throw new Error("Nothing to run: the prompt is empty.");
   const id = nanoid(10);
-  db.prepare("INSERT INTO runs (id, job_id, source, prompt, category, status, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?)").run(
+  db.prepare("INSERT INTO runs (id, job_id, source, prompt, category, status, params, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)").run(
     id,
     input.job?.id ?? null,
     input.source,
     prompt,
     input.category ?? input.job?.category ?? "auto",
+    Object.keys(params).length ? JSON.stringify(params) : null,
     now(),
   );
   if (input.job) db.prepare("UPDATE jobs SET last_run_at = ? WHERE id = ?").run(now(), input.job.id);

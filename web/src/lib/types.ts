@@ -197,6 +197,17 @@ export interface Channel {
   status: { ok: boolean; detail: string };
 }
 
+/** A value a job's prompt takes as {{name}}; Run now asks for it, cron runs use the default. */
+export interface JobParam {
+  name: string;
+  label?: string;
+  type: "number" | "string" | "boolean";
+  default: number | string | boolean;
+  description?: string;
+}
+
+export type ParamValues = Record<string, number | string | boolean>;
+
 export interface Job {
   id: string;
   name: string;
@@ -205,6 +216,7 @@ export interface Job {
   prompt: string;
   category: string;
   presetId: string | null;
+  params: JobParam[];
   token: string;
   enabled: boolean;
   lastRunAt: string | null;
@@ -223,6 +235,8 @@ export interface Run {
   sessionId: string | null;
   /** Queued again to carry on its own session. */
   resume: boolean;
+  /** The parameter values it ran with, defaults filled in. */
+  params: ParamValues | null;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;

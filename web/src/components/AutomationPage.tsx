@@ -5,12 +5,14 @@ import { cn } from "../lib/cn";
 import { projectApi } from "../lib/project";
 import { ago, when } from "../lib/format";
 import { attempt, useLive, useStore } from "../lib/store";
-import type { Job, Run } from "../lib/types";
+import type { Job, JobParam, ParamValues, Run } from "../lib/types";
 import { usePurpose } from "../lib/usePurpose";
 import { useConfirm } from "./Confirm";
 import { Button } from "./ui/Button";
 import { CopyButton } from "./ui/CopyId";
+import { Checkbox } from "./ui/Checkbox";
 import { Empty } from "./ui/Empty";
+import { Input } from "./ui/Input";
 import { Popover } from "./ui/Popover";
 import { StatusBadge } from "./ui/StatusBadge";
 
@@ -127,18 +129,25 @@ function JobRow({ job, onEdit }: { job: Job; onEdit: () => void }) {
         <StatusBadge tone="off">{job.category || "no category"}</StatusBadge>
         <HowToRun job={job} curl={curl} />
         <span className="ml-auto flex gap-1">
-          <Button variant="ghost" size="icon" title="Run now" onClick={() =>
+          <Button variant="ghost" size="icon" title="Run now" onClick={() => {
+              // The form writes here; the dialog's Queue it reads it.
+              const values: ParamValues = Object.fromEntries((job.params ?? []).map((param) => [param.name, param.default]));
               void confirm({
                 title: `Run '${job.name}' now?`,
                 description: "Joins the queue as an unattended session.",
-                body: <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-[11px]">{job.prompt}</pre>,
+                body: (
+                  <div className="space-y-3">
+                    {job.params?.length ? <ParamForm params={job.params} values={values} /> : null}
+                    <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-[11px]">{job.prompt}</pre>
+                  </div>
+                ),
                 confirmLabel: "Queue it",
                 run: async () => {
-                  await api.runJob(job.id);
+                  await api.runJob(job.id, job.params?.length ? values : undefined);
                   useStore.getState().notify("Queued.");
                 },
-              })
-            }>
+              });
+            }}>
             <Play size={13} />
           </Button>
           <Button variant="ghost" size="icon" title="Edit with Claude" onClick={onEdit}>
@@ -163,6 +172,15 @@ function JobRow({ job, onEdit }: { job: Job; onEdit: () => void }) {
         </span>
       </div>
       <div className="mt-1 line-clamp-2 break-words pl-6 text-[11px] text-muted-foreground">{job.prompt}</div>
+      {job.params?.length ? (
+        <div className="mt-1 flex flex-wrap gap-1 pl-6">
+          {job.params.map((param) => (
+            <span key={param.name} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground" title={param.description ?? param.label ?? param.name}>
+              {param.name}: {param.type} = {String(param.default)}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="mt-1 flex flex-wrap gap-3 pl-6 text-[11px] text-muted-foreground">
         {job.kind === "cron" ? (
           <>
@@ -234,9 +252,44 @@ function HowToRun({ job, curl }: { job: Job; curl: string }) {
           <span className="min-w-0 break-all font-mono">POST {projectApi()}/jobs/{job.id}/run</span>
           <CopyButton text={local} />
         </span>
-        No token: the hub only listens on 127.0.0.1. An optional <span className="font-mono">{"{\"payload\": {...}}"}</span> body fills the prompt as above.
+        No token: the hub only listens on 127.0.0.1. An optional <span className="font-mono">{"{\"payload\": {...}}"}</span> body fills the prompt as above{job.params?.length ? <>, and <span className="font-mono">{"{\"params\": {...}}"}</span> sets its parameters (left out: their defaults)</> : null}.
       </HowStep>
     </Popover>
+  );
+}
+
+/** The job's parameters, defaults filled in; each change is written into values. */
+function ParamForm({ params, values }: { params: JobParam[]; values: ParamValues }) {
+  const [state, setState] = useState<Record<string, string | boolean>>(() =>
+    Object.fromEntries(params.map((param) => [param.name, param.type === "boolean" ? Boolean(param.default) : String(param.default)])),
+  );
+  const set = (param: JobParam, value: string | boolean) => {
+    setState((current) => ({ ...current, [param.name]: value }));
+    // A number left as typed is checked by the hub, which refuses one that is not a number.
+    values[param.name] = param.type === "number" && typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : value;
+  };
+  return (
+    <div className="space-y-2">
+      {params.map((param) => (
+        <div key={param.name} className="space-y-1">
+          {param.type === "boolean" ? (
+            <Checkbox id={`param-${param.name}`} label={param.label || param.name} checked={state[param.name] === true} onCheckedChange={(checked) => set(param, checked)} />
+          ) : (
+            <label className="block space-y-1">
+              <div className="text-xs font-medium">
+                {param.label || param.name} <span className="font-mono text-[10px] font-normal text-muted-foreground">{`{{${param.name}}}`}</span>
+              </div>
+              <Input
+                type={param.type === "number" ? "number" : "text"}
+                value={String(state[param.name] ?? "")}
+                onChange={(event) => set(param, event.target.value)}
+              />
+            </label>
+          )}
+          {param.description && <div className="text-[11px] text-muted-foreground">{param.description}</div>}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -272,6 +325,11 @@ function RunTable({ runs }: { runs: Run[] }) {
             {run.jobName && <span className="font-medium">{run.jobName}: </span>}
             <span className="text-muted-foreground">{run.prompt}</span>
           </span>
+          {run.params && Object.keys(run.params).length > 0 && (
+            <span className="hidden max-w-[40%] shrink-0 truncate font-mono text-[10px] text-muted-foreground md:block" title={JSON.stringify(run.params, null, 2)}>
+              {Object.entries(run.params).map(([name, value]) => `${name}=${value}`).join(" ")}
+            </span>
+          )}
           <span className="shrink-0 text-[11px] text-muted-foreground">{ago(run.createdAt)}</span>
           {run.sessionId && (
             <Button variant="ghost" size="sm" onClick={() => go({ kind: "session", id: run.sessionId! })}>
