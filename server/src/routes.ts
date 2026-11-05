@@ -18,7 +18,7 @@ import { currentProject, withProject } from "./context.js";
 import { projectRoot, runDir, toolVersion, transcriptsDir } from "./paths.js";
 import { addProject, allProjects, getProject, listProjects, removeProject, touchProject } from "./projects.js";
 import { promptDefinitions, renderPrompt, setPrompt } from "./prompts.js";
-import { closeOpenSessions, getSessionRow, hubUrl, listSessions, openSessionIds, openSessionsAdd, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
+import { closeOpenSessions, getSessionRow, hubUrl, listSessions, openSessionIds, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
 import { killTerminal, terminalForSession } from "./terminals.js";
 import { isPurpose, purposeNote, purposeTitle } from "./purposes.js";
 import { deleteSession, deletionPlan, setSessionTitle } from "./sessionFiles.js";
@@ -154,8 +154,8 @@ hubApi.get(
     const muted = new Set(mutedProjects());
     return acrossProjects((info) => {
       const sessions = listSessions();
-      // A terminal started before the list was kept joins it here.
-      for (const session of sessions) if (session.live) openSessionsAdd(session.id);
+      // Read only: a session joins when its terminal starts (startSession). Adding the live ones here
+      // would bring back one just closed, its terminal not yet gone when the panel reloads.
       const byId = new Map(sessions.map((session) => [session.id, session]));
       const pick = (session: (typeof sessions)[number]) => ({
         id: session.id,

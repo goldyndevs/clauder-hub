@@ -1,6 +1,6 @@
 {
   "name": "clauder-hub",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "A local dashboard that runs, watches and automates the Claude Code sessions of every project on the machine",
   "license": "MIT",
   "author": "goldyndevs <goldyndevs@gmail.com>",
