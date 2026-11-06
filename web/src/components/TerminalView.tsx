@@ -138,6 +138,7 @@ function openLink(event: MouseEvent, link: string, terminalId: string): boolean 
  */
 export function TerminalView({ terminalId, onExit }: { terminalId: string; onExit?: () => void }) {
   const host = useRef<HTMLDivElement>(null);
+  const copyRef = useRef<(() => boolean) | null>(null);
   const [state, setState] = useState<"connecting" | "open" | "closed">("connecting");
 
   useEffect(() => {
@@ -206,7 +207,28 @@ export function TerminalView({ terminalId, onExit }: { terminalId: string; onExi
     fit.fit();
     // xterm turns Ctrl+V into ^V and cancels the key, so the browser never pastes. Let the browser
     // have it: its paste event reaches xterm, which sends the text (bracketed when Claude asks for it).
-    term.attachCustomKeyEventHandler((event) => !(event.type === "keydown" && event.ctrlKey && !event.altKey && !event.metaKey && event.code === "KeyV"));
+    // With text selected, Ctrl+C (or Ctrl+Shift+C) copies it, as in Windows Terminal; without, ^C goes to Claude.
+    const copySelection = () => {
+      const text = term.getSelection();
+      if (!text) return false;
+      void navigator.clipboard.writeText(text).then(
+        () => useStore.getState().notify("Copied."),
+        () => useStore.getState().notify("Could not copy to the clipboard.", "error"),
+      );
+      term.clearSelection();
+      return true;
+    };
+    copyRef.current = copySelection;
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) return true;
+      if (event.code === "KeyV" && !event.shiftKey) return false;
+      if (event.code === "KeyC" && term.hasSelection()) {
+        event.preventDefault();
+        copySelection();
+        return false;
+      }
+      return true;
+    });
 
     const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminals/${terminalId}`);
     const send = (message: unknown) => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify(message));
@@ -250,8 +272,15 @@ export function TerminalView({ terminalId, onExit }: { terminalId: string; onExi
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden rounded-lg border bg-[#141413]">
-      {/* A right click belongs to the terminal (Claude may take it as a mouse report), not the browser's menu. */}
-      <div ref={host} className="terminal-host h-full w-full" onContextMenu={(event) => event.preventDefault()} />
+      {/* A right click belongs to the terminal (Claude may take it as a mouse report), not the browser's menu; with text selected it copies it. */}
+      <div
+        ref={host}
+        className="terminal-host h-full w-full"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          copyRef.current?.();
+        }}
+      />
       {state === "connecting" && <div className="absolute bottom-2 right-3 text-[11px] text-muted-foreground">connecting...</div>}
       {state === "closed" && <div className="absolute bottom-2 right-3 text-[11px] text-muted-foreground">detached</div>}
     </div>
