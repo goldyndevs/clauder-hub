@@ -47,6 +47,8 @@ interface State {
   /** The project shown, from the route; null on the home page. */
   projectId: string | null;
   health: Health | null;
+  /** The project being switched to while the shown one stays on screen; null when none. */
+  switching: string | null;
   sessions: Session[];
   open: Interaction[];
   view: View;
@@ -111,13 +113,81 @@ export function openWindow(view: View): void {
 
 const NO_TICKS: Record<Topic, number> = { sessions: 0, transcript: 0, interactions: 0, runs: 0, jobs: 0, mcp: 0, channels: 0, files: 0, projects: 0 };
 
+/** What switching to a project reads, read again after this long. */
+const PREFETCH_FRESH = 10_000;
+const prefetched = new Map<string, { at: number; read: Promise<[Health, Session[], Interaction[]]> }>();
+
+/** A project's health, sessions and open interactions; a recent prefetch is used once when taking it. */
+function readProject(projectId: string, take = false): Promise<[Health, Session[], Interaction[]]> {
+  const hit = prefetched.get(projectId);
+  if (hit && Date.now() - hit.at < PREFETCH_FRESH) {
+    if (take) prefetched.delete(projectId);
+    return hit.read;
+  }
+  const read = <T,>(path: string) =>
+    fetch(`/api/p/${encodeURIComponent(projectId)}${path}`).then(async (response) => {
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? `${response.status} ${response.statusText}`);
+      return payload as T;
+    });
+  return Promise.all([read<Health>("/health"), read<Session[]>("/sessions"), read<Interaction[]>("/interactions?status=open")]);
+}
+
+/** Pointing at another project reads it ahead, so the switch that may follow is instant. */
+export function prefetchProject(projectId: string): void {
+  if (projectId === useStore.getState().projectId) return;
+  const hit = prefetched.get(projectId);
+  if (hit && Date.now() - hit.at < PREFETCH_FRESH) return;
+  const read = readProject(projectId);
+  // A failed read is not kept: the switch reads again and says what went wrong.
+  read.catch(() => prefetched.delete(projectId));
+  prefetched.set(projectId, { at: Date.now(), read });
+}
+
 export const useStore = create<State>((set, get) => {
   /**
    * Switches what the page shows to another project (or home): its state is
    * dropped and read again, and the per-project stores (open tabs, unsaved
    * edits) swap to that project's. The page remounts on the new project.
    */
+  /** The project the page is on its way to, while the one shown stays usable; null when none. */
+  let wanted: string | null = null;
+
+  /**
+   * From one project to another: the one shown stays on screen and usable
+   * while the next is read, then the page swaps to it in one go. A thin bar
+   * says it is on its way. Going somewhere in the shown project meanwhile
+   * drops the switch.
+   */
+  const switchTo = async (projectId: string, next: { view: View; windowed: boolean }) => {
+    wanted = projectId;
+    set({ switching: projectId });
+    try {
+      const [health, sessions, open] = await readProject(projectId, true);
+      if (wanted !== projectId) return;
+      wanted = null;
+      setCurrentProject(projectId);
+      switchProjectStores(projectId);
+      set({ projectId, health, sessions, open, transcriptTicks: {}, view: next.view, windowed: next.windowed, switching: null });
+      if (projectId !== GLOBAL_ID) void api.openedProject(projectId).catch(() => undefined);
+    } catch (cause) {
+      if (wanted !== projectId) return;
+      wanted = null;
+      set({ switching: null });
+      // Only the hub saying it has no such project sends the page home; anything else is shown and the page stays.
+      if (/no such project/i.test((cause as Error).message)) {
+        get().notify(`The hub has no project '${projectId}'. Open its folder again from here.`, "error");
+        get().openProject(GLOBAL_ID);
+        return;
+      }
+      get().notify(`Could not open the project: ${(cause as Error).message}`, "error");
+      // The route goes back to what is still shown.
+      history.replaceState(null, "", hashOf(get().projectId, get().view, get().windowed));
+    }
+  };
+
   const enter = async (projectId: string | null) => {
+    wanted = null;
     setCurrentProject(projectId);
     switchProjectStores(projectId);
     set({ projectId, health: null, sessions: [], open: [], transcriptTicks: {} });
@@ -141,6 +211,7 @@ export const useStore = create<State>((set, get) => {
 
   return {
     health: null,
+    switching: null,
     sessions: [],
     open: [],
     ...readHash(),
@@ -152,7 +223,11 @@ export const useStore = create<State>((set, get) => {
       window.addEventListener("hashchange", () => {
         const next = readHash();
         const changed = next.projectId !== get().projectId;
-        set({ view: next.view, windowed: next.windowed });
+        // Another project with one already shown: it stays until the next is read.
+        if (changed && next.projectId && get().health) return void switchTo(next.projectId, next);
+        // Somewhere in the shown project: a switch on its way is dropped.
+        wanted = null;
+        set({ view: next.view, windowed: next.windowed, switching: null });
         if (changed) void enter(next.projectId);
       });
 
@@ -207,7 +282,7 @@ export const useStore = create<State>((set, get) => {
       const show = (view: View) => {
         const hash = hashOf(id, view, false);
         // The same hash fires no hashchange (a project opened again right after a failed open).
-        if (window.location.hash === hash && id !== get().projectId) void enter(id);
+        if (window.location.hash === hash && id && id !== get().projectId) void (get().health ? switchTo(id, { view, windowed: false }) : enter(id));
         window.location.hash = hash.slice(1);
       };
       if (!id || id === GLOBAL_ID || id === get().projectId) return show({ kind: "page", page: "overview" });

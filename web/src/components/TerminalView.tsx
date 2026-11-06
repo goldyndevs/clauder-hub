@@ -1,12 +1,15 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { filesApi } from "../lib/filesApi";
 import { openedFromTerminal, useOpenFiles } from "../lib/openFiles";
+import { projectApi } from "../lib/project";
 import { useStore } from "../lib/store";
 
 /** A path with a folder in it and a file name with an extension, optionally :line[:col]; absolute (C:\ or /) or relative. */
@@ -130,85 +133,134 @@ function openLink(event: MouseEvent, link: string, terminalId: string): boolean 
   return true;
 }
 
-/**
- * The session's own terminal, untouched: keystrokes go to the `claude`
- * process as they are, and its output is drawn as it comes. Leaving the page
- * only detaches; the process keeps running on the hub and the next attach
- * replays what it printed meanwhile.
- */
-export function TerminalView({ terminalId, onExit }: { terminalId: string; onExit?: () => void }) {
-  const host = useRef<HTMLDivElement>(null);
-  const copyRef = useRef<(() => boolean) | null>(null);
-  const [state, setState] = useState<"connecting" | "open" | "closed">("connecting");
+type TerminalState = "connecting" | "open" | "closed";
 
-  useEffect(() => {
-    if (!host.current) return;
-    const term = new Terminal({
-      cursorBlink: true,
-      fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, SFMono-Regular, Menlo, monospace',
-      fontSize: 13,
-      scrollback: 10_000,
-      allowProposedApi: true,
-      // A glyph from a fallback font that is wider than its cell is squeezed into it, not drawn over the next one.
-      rescaleOverlappingGlyphs: true,
-      // Links Claude prints itself (OSC 8): a file in the project opens in the hub, a web link in a new tab.
-      linkHandler: {
-        allowNonHttpProtocols: true,
-        activate: (event, uri) => {
-          if (/^https?:/i.test(uri)) window.open(uri, "_blank", "noopener");
-          else openLink(event, uri, terminalId);
-        },
+/**
+ * One terminal kept in the page: its xterm, its socket, and the element it
+ * draws into. Leaving the view only takes the element off the page; output
+ * keeps coming in, so going back (to another session, another project, and
+ * back) shows it at once with its scrollback, without a replay.
+ */
+interface Kept {
+  terminalId: string;
+  term: Terminal;
+  fit: FitAddon;
+  search: SearchAddon;
+  element: HTMLDivElement;
+  socket: WebSocket;
+  state: TerminalState;
+  ended: boolean;
+  mounted: boolean;
+  usedAt: number;
+  opened: boolean;
+  listeners: Set<() => void>;
+  /** Set by the view showing it. */
+  onExit?: () => void;
+  onFind?: () => void;
+  send: (message: unknown) => void;
+  sendSize: () => void;
+  copy: () => boolean;
+  dispose: () => void;
+}
+
+/** How many terminals stay alive off screen; the least recently shown goes first. */
+const KEEP = 8;
+const kept = new Map<string, Kept>();
+
+function setState(entry: Kept, state: TerminalState): void {
+  entry.state = state;
+  for (const listener of entry.listeners) listener();
+}
+
+/** Drops what is off screen beyond KEEP, and anything off screen whose terminal is gone. */
+function prune(): void {
+  const idle = [...kept.values()].filter((entry) => !entry.mounted);
+  for (const entry of idle) if (entry.ended || entry.state === "closed") entry.dispose();
+  const left = [...kept.values()].filter((entry) => !entry.mounted).sort((a, b) => a.usedAt - b.usedAt);
+  while (kept.size > KEEP && left.length) left.shift()!.dispose();
+}
+
+function keep(terminalId: string): Kept {
+  const existing = kept.get(terminalId);
+  if (existing && existing.state !== "closed") return existing;
+  existing?.dispose();
+
+  const term = new Terminal({
+    cursorBlink: true,
+    fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, SFMono-Regular, Menlo, monospace',
+    fontSize: 13,
+    scrollback: 10_000,
+    allowProposedApi: true,
+    // A glyph from a fallback font that is wider than its cell is squeezed into it, not drawn over the next one.
+    rescaleOverlappingGlyphs: true,
+    // Links Claude prints itself (OSC 8): a file in the project opens in the hub, a web link in a new tab.
+    linkHandler: {
+      allowNonHttpProtocols: true,
+      activate: (event, uri) => {
+        if (/^https?:/i.test(uri)) window.open(uri, "_blank", "noopener");
+        else openLink(event, uri, terminalId);
       },
-      theme: {
-        background: "#141413",
-        foreground: "#f5f4ee",
-        cursor: "#d77757",
-        selectionBackground: "#d7775755",
-      },
-    });
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon());
-    // File paths printed as plain text; one inside a web address is the web link's.
-    const pathLinks = term.registerLinkProvider({
-      provideLinks: (y, callback) => {
-        const { text, cells } = logicalLine(term, y - 1);
-        // The paths on this row, a long one carried over from the row before or onto the next included.
-        const candidates = pathsIn(text).filter(
-          (item) => (projectPath(item.text) || localPath(item.text)) && cells.slice(item.index, item.index + item.text.length).some((cell) => cell.y === y),
-        );
-        if (!candidates.length) return callback(undefined);
-        void Promise.all(candidates.map((item) => fileExists(item.text))).then((exists) => {
-          const links = candidates
-            .filter((_, index) => exists[index])
-            .map((item) => ({
-              text: item.text,
-              range: { start: cells[item.index], end: cells[item.index + item.text.length - 1] },
-              activate: (event: MouseEvent, link: string) => void openLink(event, link, terminalId),
-            }));
-          callback(links.length ? links : undefined);
-        });
-      },
-    });
-    // Character widths as Claude Code counts them (emoji, ●, ⎿ are two cells or one the same way on both
-    // sides); with xterm's default Unicode 6 table the cursor drifts and leaves letters behind on screen.
-    term.loadAddon(new Unicode11Addon());
-    term.unicode.activeVersion = "11";
-    term.open(host.current);
-    // Drawn on a fixed grid by the GPU, as a desktop terminal does, instead of as text the fonts can shift.
-    // Without WebGL, or when the browser takes the context back, the DOM renderer carries on.
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => webgl.dispose());
-      term.loadAddon(webgl);
-    } catch {
-      // No WebGL here: the DOM renderer stays.
-    }
-    fit.fit();
-    // xterm turns Ctrl+V into ^V and cancels the key, so the browser never pastes. Let the browser
-    // have it: its paste event reaches xterm, which sends the text (bracketed when Claude asks for it).
+    },
+    theme: {
+      background: "#141413",
+      foreground: "#f5f4ee",
+      cursor: "#d77757",
+      selectionBackground: "#d7775755",
+    },
+  });
+  const fit = new FitAddon();
+  term.loadAddon(fit);
+  term.loadAddon(new WebLinksAddon());
+  const search = new SearchAddon();
+  term.loadAddon(search);
+  // File paths printed as plain text; one inside a web address is the web link's.
+  const pathLinks = term.registerLinkProvider({
+    provideLinks: (y, callback) => {
+      const { text, cells } = logicalLine(term, y - 1);
+      // The paths on this row, a long one carried over from the row before or onto the next included.
+      const candidates = pathsIn(text).filter(
+        (item) => (projectPath(item.text) || localPath(item.text)) && cells.slice(item.index, item.index + item.text.length).some((cell) => cell.y === y),
+      );
+      if (!candidates.length) return callback(undefined);
+      void Promise.all(candidates.map((item) => fileExists(item.text))).then((exists) => {
+        const links = candidates
+          .filter((_, index) => exists[index])
+          .map((item) => ({
+            text: item.text,
+            range: { start: cells[item.index], end: cells[item.index + item.text.length - 1] },
+            activate: (event: MouseEvent, link: string) => void openLink(event, link, terminalId),
+          }));
+        callback(links.length ? links : undefined);
+      });
+    },
+  });
+  // Character widths as Claude Code counts them (emoji, ●, ⎿ are two cells or one the same way on both
+  // sides); with xterm's default Unicode 6 table the cursor drifts and leaves letters behind on screen.
+  term.loadAddon(new Unicode11Addon());
+  term.unicode.activeVersion = "11";
+
+  const element = document.createElement("div");
+  element.className = "h-full w-full";
+  const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminals/${terminalId}`);
+  const send = (message: unknown) => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify(message));
+
+  const entry: Kept = {
+    terminalId,
+    term,
+    fit,
+    search,
+    element,
+    socket,
+    state: "connecting",
+    ended: false,
+    mounted: false,
+    usedAt: Date.now(),
+    opened: false,
+    listeners: new Set(),
+    send,
+    sendSize: () => send({ type: "resize", cols: term.cols, rows: term.rows }),
     // With text selected, Ctrl+C (or Ctrl+Shift+C) copies it, as in Windows Terminal; without, ^C goes to Claude.
-    const copySelection = () => {
+    copy: () => {
       const text = term.getSelection();
       if (!text) return false;
       void navigator.clipboard.writeText(text).then(
@@ -217,43 +269,124 @@ export function TerminalView({ terminalId, onExit }: { terminalId: string; onExi
       );
       term.clearSelection();
       return true;
-    };
-    copyRef.current = copySelection;
-    term.attachCustomKeyEventHandler((event) => {
-      if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) return true;
-      if (event.code === "KeyV" && !event.shiftKey) return false;
-      if (event.code === "KeyC" && term.hasSelection()) {
-        event.preventDefault();
-        copySelection();
-        return false;
-      }
-      return true;
-    });
+    },
+    dispose: () => {
+      if (kept.get(terminalId) === entry) kept.delete(terminalId);
+      pathLinks.dispose();
+      input.dispose();
+      socket.onclose = null;
+      socket.close();
+      term.dispose();
+      element.remove();
+    },
+  };
 
-    const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminals/${terminalId}`);
-    const send = (message: unknown) => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify(message));
-    const sendSize = () => send({ type: "resize", cols: term.cols, rows: term.rows });
+  term.attachCustomKeyEventHandler((event) => {
+    if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) return true;
+    // xterm turns Ctrl+V into ^V and cancels the key, so the browser never pastes. Let the browser
+    // have it: its paste event reaches xterm, which sends the text (bracketed when Claude asks for it).
+    if (event.code === "KeyV" && !event.shiftKey) return false;
+    if (event.code === "KeyC" && term.hasSelection()) {
+      event.preventDefault();
+      entry.copy();
+      return false;
+    }
+    // Ctrl+F searches the scrollback instead of reaching Claude (cursor right).
+    if (event.code === "KeyF" && !event.shiftKey && entry.onFind) {
+      event.preventDefault();
+      entry.onFind();
+      return false;
+    }
+    // Ctrl+Enter is Claude Code's Send now (Ctrl+X Ctrl+S), which the browser cannot type as a chord.
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      send({ type: "input", data: "\x18\x13" });
+      return false;
+    }
+    return true;
+  });
 
-    socket.onopen = () => {
-      setState("open");
-      sendSize();
-      term.focus();
-    };
-    socket.onmessage = (event) => {
-      const frame = JSON.parse(event.data) as { type: string; data?: string; code?: number };
-      if (frame.type === "output" && frame.data) term.write(frame.data);
-      if (frame.type === "exit") {
-        term.write(`\r\n\x1b[2m[session ended, exit code ${frame.code}]\x1b[0m\r\n`);
-        onExit?.();
-      }
-    };
-    socket.onclose = () => setState("closed");
+  socket.onopen = () => {
+    setState(entry, "open");
+    entry.sendSize();
+    if (entry.mounted) term.focus();
+  };
+  socket.onmessage = (event) => {
+    const frame = JSON.parse(event.data) as { type: string; data?: string; code?: number };
+    if (frame.type === "output" && frame.data) term.write(frame.data);
+    if (frame.type === "exit") {
+      entry.ended = true;
+      term.write(`\r\n\x1b[2m[session ended, exit code ${frame.code}]\x1b[0m\r\n`);
+      entry.onExit?.();
+    }
+  };
+  socket.onclose = () => {
+    setState(entry, "closed");
+    if (!entry.mounted) entry.dispose();
+  };
+  const input = term.onData((data) => send({ type: "input", data }));
 
-    const input = term.onData((data) => send({ type: "input", data }));
+  kept.set(terminalId, entry);
+  return entry;
+}
+
+/** Shows a kept terminal in host, opening it there the first time. */
+function show(entry: Kept, host: HTMLElement): void {
+  entry.mounted = true;
+  entry.usedAt = Date.now();
+  host.appendChild(entry.element);
+  if (!entry.opened) {
+    entry.opened = true;
+    entry.term.open(entry.element);
+    // Drawn on a fixed grid by the GPU, as a desktop terminal does, instead of as text the fonts can shift.
+    // Without WebGL, or when the browser takes the context back, the DOM renderer carries on.
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      entry.term.loadAddon(webgl);
+    } catch {
+      // No WebGL here: the DOM renderer stays.
+    }
+  }
+  try {
+    entry.fit.fit();
+    entry.sendSize();
+  } catch {
+    // Measured again on the next resize.
+  }
+  entry.term.focus();
+}
+
+/** "a b" for a shell: a path with a space is quoted. */
+const quoted = (path: string) => (/\s/.test(path) ? `"${path}"` : path);
+
+/**
+ * The session's own terminal, untouched: keystrokes go to the `claude`
+ * process as they are, and its output is drawn as it comes. Leaving the view
+ * only takes it off the page (see Kept); the process keeps running on the hub.
+ */
+export function TerminalView({ terminalId, onExit }: { terminalId: string; onExit?: () => void }) {
+  const host = useRef<HTMLDivElement>(null);
+  const entryRef = useRef<Kept | null>(null);
+  const [state, setViewState] = useState<TerminalState>("connecting");
+  const [finding, setFinding] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    if (!host.current) return;
+    const entry = keep(terminalId);
+    entryRef.current = entry;
+    const sync = () => setViewState(entry.state);
+    entry.listeners.add(sync);
+    sync();
+    entry.onExit = onExit;
+    entry.onFind = () => setFinding(true);
+    show(entry, host.current);
+
     const observer = new ResizeObserver(() => {
       try {
-        fit.fit();
-        sendSize();
+        entry.fit.fit();
+        entry.sendSize();
       } catch {
         // Hidden panels measure as zero; the next visible resize fixes it.
       }
@@ -262,27 +395,158 @@ export function TerminalView({ terminalId, onExit }: { terminalId: string; onExi
 
     return () => {
       observer.disconnect();
-      pathLinks.dispose();
-      input.dispose();
-      socket.close();
-      term.dispose();
+      entry.listeners.delete(sync);
+      entry.onExit = undefined;
+      entry.onFind = undefined;
+      entry.mounted = false;
+      entry.usedAt = Date.now();
+      entry.element.remove();
+      entryRef.current = null;
+      prune();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [terminalId]);
 
+  /** Files dropped from the computer are saved on the hub and their paths pasted, as a desktop terminal does. */
+  const drop = async (event: React.DragEvent) => {
+    event.preventDefault();
+    setDragging(false);
+    const entry = entryRef.current;
+    if (!entry) return;
+    const files = [...event.dataTransfer.files];
+    if (!files.length) {
+      const text = event.dataTransfer.getData("text/plain");
+      if (text) entry.term.paste(text);
+      entry.term.focus();
+      return;
+    }
+    try {
+      const paths: string[] = [];
+      for (const file of files) {
+        const response = await fetch(`${projectApi()}/drop`, {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) },
+          body: file,
+        });
+        const payload = (await response.json().catch(() => ({}))) as { path?: string; error?: string };
+        if (!response.ok || !payload.path) throw new Error(payload.error ?? `${response.status} ${response.statusText}`);
+        paths.push(quoted(payload.path));
+      }
+      entry.term.paste(paths.join(" ") + " ");
+      entry.term.focus();
+    } catch (error) {
+      useStore.getState().notify(`Could not drop the file: ${(error as Error).message}`, "error");
+    }
+  };
+
   return (
-    <div className="relative h-full min-h-0 overflow-hidden rounded-lg border bg-[#141413]">
+    <div
+      className="relative h-full min-h-0 overflow-hidden rounded-lg border bg-[#141413]"
+      onDragOver={(event) => {
+        if (![...event.dataTransfer.types].some((type) => type === "Files" || type === "text/plain")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(event) => void drop(event)}
+    >
       {/* A right click belongs to the terminal (Claude may take it as a mouse report), not the browser's menu; with text selected it copies it. */}
       <div
         ref={host}
         className="terminal-host h-full w-full"
         onContextMenu={(event) => {
           event.preventDefault();
-          copyRef.current?.();
+          entryRef.current?.copy();
         }}
       />
+      {finding && entryRef.current && (
+        <FindBar
+          search={entryRef.current.search}
+          onClose={() => {
+            entryRef.current?.search.clearDecorations();
+            setFinding(false);
+            entryRef.current?.term.focus();
+          }}
+        />
+      )}
+      {dragging && (
+        <div className="pointer-events-none absolute inset-2 grid place-items-center rounded-lg border-2 border-dashed border-primary/70 bg-primary/10 text-xs text-foreground">
+          Drop to paste its path
+        </div>
+      )}
       {state === "connecting" && <div className="absolute bottom-2 right-3 text-[11px] text-muted-foreground">connecting...</div>}
       {state === "closed" && <div className="absolute bottom-2 right-3 text-[11px] text-muted-foreground">detached</div>}
+    </div>
+  );
+}
+
+const FIND_DECORATIONS = {
+  matchBackground: "#d7775755",
+  matchOverviewRuler: "#d77757",
+  activeMatchBackground: "#d77757",
+  activeMatchColorOverviewRuler: "#f5f4ee",
+};
+
+/** Ctrl+F in a terminal: find in its scrollback. Enter goes to the next match, Shift+Enter the one before, Esc closes. */
+function FindBar({ search, onClose }: { search: SearchAddon; onClose: () => void }) {
+  const [text, setText] = useState("");
+  const [result, setResult] = useState<{ index: number; count: number } | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    input.current?.focus();
+    const results = search.onDidChangeResults((value) => setResult({ index: value.resultIndex, count: value.resultCount }));
+    return () => results.dispose();
+  }, [search]);
+
+  const find = (forward: boolean, value = text) => {
+    if (!value) {
+      search.clearDecorations();
+      setResult(null);
+      return;
+    }
+    const options = { decorations: FIND_DECORATIONS, incremental: false };
+    if (forward) search.findNext(value, options);
+    else search.findPrevious(value, options);
+  };
+
+  return (
+    <div className="absolute right-3 top-2 z-10 flex items-center gap-1 rounded-md border bg-background/95 px-1.5 py-1 shadow-lg">
+      <input
+        ref={input}
+        value={text}
+        placeholder="Find"
+        aria-label="Find in the terminal"
+        onChange={(event) => {
+          setText(event.target.value);
+          find(true, event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            find(!event.shiftKey);
+          }
+        }}
+        className="w-44 bg-transparent px-1 text-xs focus:outline-none"
+      />
+      <span className="min-w-[3.5rem] text-right text-[10px] tabular-nums text-muted-foreground">
+        {text ? (result && result.count ? `${result.index + 1}/${result.count}` : "none") : ""}
+      </span>
+      <button onClick={() => find(false)} title="Previous (Shift+Enter)" aria-label="Previous match" className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+        <ChevronUp size={13} />
+      </button>
+      <button onClick={() => find(true)} title="Next (Enter)" aria-label="Next match" className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+        <ChevronDown size={13} />
+      </button>
+      <button onClick={onClose} title="Close (Esc)" aria-label="Close find" className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+        <X size={13} />
+      </button>
     </div>
   );
 }

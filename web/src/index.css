@@ -138,3 +138,12 @@
 .sessions-flash {
   animation: sessions-flash 1.6s ease-out;
 }
+
+/* Switching project: a thin bar slides along the top while the next one is read. */
+@keyframes switching-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+.switching-bar {
+  animation: switching-bar 1s ease-in-out infinite;
+}

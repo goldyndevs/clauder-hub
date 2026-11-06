@@ -10,6 +10,7 @@ import { WebSocketServer } from "ws";
 import { checkClaudeCode, findClaudeCode } from "./claudeCode.js";
 import { withProject } from "./context.js";
 import { globalDb } from "./db.js";
+import { devRoutes } from "./devtools.js";
 import { fileRoutes } from "./fileRoutes.js";
 import { watchRunExits } from "./jobs.js";
 import { ensureLayout, hubHome } from "./paths.js";
@@ -159,6 +160,7 @@ scoped.use((req, res, next) => {
   withProject(project, next);
 });
 scoped.use("/files", fileRoutes);
+scoped.use(devRoutes);
 scoped.use(api);
 app.use("/api/p/:projectId", scoped);
 app.use("/api", hubApi);

@@ -17,6 +17,7 @@ import { PresetsPage } from "./components/PresetsPage";
 import { DefinitionsPage, HooksPage, InstructionsPage, McpServersPage, PluginsPage } from "./components/ProjectPages";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { SessionView } from "./components/SessionView";
+import { GlobalLiveFeed, ShortcutKeys, useWaitingCount } from "./components/Shortcuts";
 import { FileTabs } from "./components/FileTabs";
 // import { RunningDock } from "./components/RunningDock";
 import { TerminalTabs } from "./components/TerminalTabs";
@@ -46,6 +47,17 @@ function Toast({ text, failed }: { text: string; failed: boolean }) {
     >
       <Icon size={15} className="shrink-0" />
       <span className="min-w-0 break-words">{text}</span>
+    </div>
+  );
+}
+
+/** While another project is read, a thin bar along the top; the page under it stays usable. */
+function SwitchingBar() {
+  const switching = useStore((state) => state.switching);
+  if (!switching) return null;
+  return (
+    <div role="progressbar" aria-label={`Opening ${switching}`} title={`Opening ${switching}...`} className="pointer-events-none fixed inset-x-0 top-0 z-[70] h-0.5 overflow-hidden bg-primary/20">
+      <div className="switching-bar h-full w-2/5 bg-primary" />
     </div>
   );
 }
@@ -140,10 +152,12 @@ export default function App() {
     boot().catch((cause: Error) => setError(cause.message));
   }, [boot]);
 
-  // The browser tab is named after the project, in every view and window, so several hubs tell apart.
+  // The browser tab is named after the project, in every view and window, so several hubs tell apart;
+  // led by how many sessions of any project wait on you.
+  const waiting = useWaitingCount();
   useEffect(() => {
-    if (health) document.title = health.project;
-  }, [health]);
+    if (health) document.title = waiting ? `(${waiting}) ${health.project}` : health.project;
+  }, [health, waiting]);
 
   // Until the project has answered, nothing below may ask it anything.
   if (!health) return <div className="grid h-screen place-items-center text-xs text-muted-foreground">Opening the project...</div>;
@@ -152,6 +166,9 @@ export default function App() {
     return (
       <ConfirmProvider>
         <GlobalShell />
+        <SwitchingBar />
+        <GlobalLiveFeed />
+        <ShortcutKeys />
         {(error || toast) && <Toast text={(error ?? toast?.text)!} failed={Boolean(error) || toast?.tone === "error"} />}
       </ConfirmProvider>
     );
@@ -192,6 +209,9 @@ export default function App() {
         {/* Every project's live sessions, to switch between them. */}
         {!windowed && wide && livePanel && <ResizeHandle onDrag={(delta) => right.resizeBy(-delta)} onReset={right.reset} />}
         {!windowed && wide && livePanel && <LivePanel width={right.width} />}
+        <SwitchingBar />
+        <GlobalLiveFeed />
+        <ShortcutKeys />
 
         {(error || toast) && <Toast text={(error ?? toast?.text)!} failed={Boolean(error) || toast?.tone === "error"} />}
       </div>

@@ -1,14 +1,15 @@
-import { ArrowRight, History, PanelRight, PanelRightClose, Pencil, Plus, X, XCircle } from "lucide-react";
+import { ArrowRight, History, ListX, PanelRight, PanelRightClose, Pencil, Plus, X, XCircle } from "lucide-react";
 import { useState } from "react";
 import { create } from "zustand";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { ago } from "../lib/format";
-import { attempt, useLive, useStore } from "../lib/store";
+import { attempt, prefetchProject, useStore } from "../lib/store";
 import type { LiveProject, LiveSession } from "../lib/types";
 import { useConfirm } from "./Confirm";
 import { ProjectMenu } from "./GlobalPage";
 import { focusNeighbourTerminal, useSessionActions } from "./SessionActions";
+import { useGlobalLive } from "./Shortcuts";
 import { TabMenu } from "./TerminalTabs";
 import { Button } from "./ui/Button";
 import { Popover } from "./ui/Popover";
@@ -79,9 +80,13 @@ function Dot({ status }: { status: LiveSession["status"] }) {
  */
 export function LivePanel({ width }: { width: number }) {
   const toggle = useLivePanel((state) => state.toggle);
-  const live = useLive(() => api.globalLive(), ["projects", "sessions", "interactions", "channels"]);
-  const projects = live.data ?? [];
+  const data = useGlobalLive((state) => state.projects);
+  const projects = data ?? [];
   const count = projects.reduce((total, project) => total + project.open.length, 0);
+  const stopped = projects.filter((project) => project.open.some((session) => !session.live));
+  // Stopped ones have nothing to stop, so they go without asking.
+  const closeStopped = () =>
+    attempt(() => Promise.all(stopped.map((project) => api.closeOpenSessions(project.id, project.open.filter((session) => !session.live).map((session) => session.id)))));
 
   return (
     <aside aria-label="Live sessions" style={{ width }} className="flex shrink-0 flex-col border-l bg-background">
@@ -89,12 +94,15 @@ export function LivePanel({ width }: { width: number }) {
         <span className="text-xs font-semibold">Open sessions</span>
         <span className="grid h-4 min-w-[1rem] place-items-center rounded-full bg-muted px-1 text-[10px] font-semibold leading-none tabular-nums text-muted-foreground">{count}</span>
         <div className="flex-1" />
+        <Button variant="ghost" size="icon" onClick={() => void closeStopped()} disabled={!stopped.length} title="Close every stopped session, in every project" aria-label="Close stopped sessions">
+          <ListX size={13} />
+        </Button>
         <Button variant="ghost" size="icon" onClick={toggle} title="Hide this panel" aria-label="Hide live sessions">
           <PanelRightClose size={13} />
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
-        {live.data && !projects.length && <p className="px-3 py-4 text-xs text-muted-foreground">No session is open in any project.</p>}
+        {data && !projects.length && <p className="px-3 py-4 text-xs text-muted-foreground">No session is open in any project.</p>}
         {projects.map((project) => (
           <ProjectGroup key={project.id} project={project} />
         ))}
@@ -167,6 +175,7 @@ function ProjectGroup({ project }: { project: LiveProject }) {
       {/* The project's own menu, as on its card on the global page. */}
       <div
         className="group flex items-center gap-1 px-1.5 py-1"
+        onMouseEnter={() => !here && prefetchProject(project.id)}
         onContextMenu={(event) => {
           event.preventDefault();
           setProjectMenu({ x: event.clientX, y: event.clientY });
@@ -220,6 +229,7 @@ function ProjectGroup({ project }: { project: LiveProject }) {
             role="button"
             tabIndex={0}
             onClick={open}
+            onMouseEnter={() => !here && prefetchProject(project.id)}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
@@ -266,6 +276,7 @@ function ProjectGroup({ project }: { project: LiveProject }) {
             ["Open", ArrowRight, () => openSessionIn(project.id, menu.session.id)],
             ["Rename", Pencil, () => void actions.rename(menu.session, project.id)],
             ["Close", X, () => void close([menu.session], "it"), true],
+            ["Close Stopped", ListX, () => void close(project.open.filter((session) => !session.live), "the stopped ones"), false, !project.open.some((session) => !session.live)],
             ["Close Others", XCircle, () => void close(project.open.filter((session) => session.id !== menu.session.id), "the others"), false, project.open.length < 2],
             ["Close All", XCircle, () => void close(project.open, "all")],
           ]}

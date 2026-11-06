@@ -34,6 +34,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { GitStatus } from "./GitStatus";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { ago, bytes, compact, totalTokens } from "../lib/format";
@@ -474,6 +475,7 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
           </>
         )}
       </div>
+      <GitStatus />
     </aside>
   );
 }
