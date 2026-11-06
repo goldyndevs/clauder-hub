@@ -90,7 +90,7 @@ export function resumeWith(sessionId: string, text: string): ChannelAnswer {
 const short = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1)}…` : text);
 const flat = (text: string) => text.replace(/\s+/g, " ").trim();
 
-const STATUS: Record<string, string> = { waiting: "⏳ waiting for you", running: "▶️ running", done: "✅ done", exited: "⏹ stopped", external: "outside the hub" };
+const STATUS: Record<string, string> = { waiting: "⏳ waiting for you", running: "▶️ running", idle: "💤 idle at its prompt", done: "✅ done", exited: "⏹ stopped", external: "outside the hub" };
 
 /** The sessions worth offering: every live one, then the latest few that stopped. */
 function pickable(): SessionView[] {

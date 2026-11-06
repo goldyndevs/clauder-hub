@@ -36,6 +36,8 @@ export interface Terminal {
   restarting?: boolean;
   /** Closed by the hub because the task is done. */
   finished?: boolean;
+  /** Claude is working a turn (its "esc to interrupt" line shows), read from the screen by watchdog.ts; unset until first read. */
+  busy?: boolean;
 }
 
 const BACKLOG_LIMIT = 2 * 1024 * 1024;

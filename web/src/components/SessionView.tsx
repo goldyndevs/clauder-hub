@@ -93,8 +93,8 @@ export function SessionView({ id }: { id: string }) {
             <StatusDot session={session} />
             <h1 className="truncate text-sm font-semibold">{session.title}</h1>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-            <StatusBadge tone={session.status === "waiting" ? "warning" : session.status === "running" ? "success" : session.status === "done" ? "on" : "off"}>{session.status}</StatusBadge>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground [&>*]:shrink-0">
+            <StatusBadge tone={session.status === "waiting" ? "warning" : session.status === "running" || session.status === "idle" ? "success" : session.status === "done" ? "on" : "off"}>{session.status}</StatusBadge>
             <StatusBadge tone="off">{session.origin === "external" ? "started in a terminal" : `from ${session.origin}`}</StatusBadge>
             {session.category && <StatusBadge tone="off">category: {session.category}</StatusBadge>}
             {session.purpose && (
@@ -105,7 +105,7 @@ export function SessionView({ id }: { id: string }) {
             <span>{when(session.startedAt)}</span>
             {session.tokens && <span>· {compact(totalTokens(session.tokens))} tokens</span>}
             {/* The full Claude Code session id, the one `claude --resume` takes. */}
-            <span className="inline-flex min-w-0 items-center gap-1 font-mono" title="Claude Code session id">
+            <span className="inline-flex min-w-0 !shrink items-center gap-1 font-mono" title={`Claude Code session id: ${session.id}`}>
               <span className="truncate">{session.id}</span>
               <CopyButton text={session.id} />
             </span>

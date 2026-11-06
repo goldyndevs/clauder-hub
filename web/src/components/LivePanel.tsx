@@ -64,7 +64,9 @@ function Dot({ status }: { status: LiveSession["status"] }) {
           ? "bg-severity-warning animate-status-pulse"
           : status === "running"
             ? "bg-success animate-status-pulse"
-            : status === "done"
+            : status === "idle"
+              ? "bg-success"
+              : status === "done"
               ? "border border-success bg-transparent"
               : "bg-muted-foreground/40",
       )}

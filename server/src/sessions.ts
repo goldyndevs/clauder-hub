@@ -17,7 +17,7 @@ import { purposeSystemPrompt, purposeTitle, type Purpose } from "./purposes.js";
 import { listTranscripts, type TranscriptSummary } from "./transcripts.js";
 
 export type Origin = "manual" | "cron" | "webhook" | "queue";
-export type SessionStatus = "running" | "waiting" | "done" | "exited" | "external";
+export type SessionStatus = "running" | "idle" | "waiting" | "done" | "exited" | "external";
 
 export interface SessionRow {
   id: string;
@@ -336,10 +336,16 @@ export function listSessions(): SessionView[] {
   const view = (id: string, summary: Partial<TranscriptSummary> | null): SessionView => {
     const row = rows.get(id);
     const terminal = terminals.get(id);
+    // A live session waits only while something is open for you to answer, works while its
+    // screen says so, and otherwise sits idle at its prompt (fresh, interrupted, or put aside).
     const status: SessionStatus = terminal
-      ? row?.status === "waiting"
-        ? "waiting"
-        : "running"
+      ? row?.status === "done"
+        ? "done"
+        : open.get(id)
+          ? "waiting"
+          : terminal.busy === false
+            ? "idle"
+            : "running"
       : row
         ? row.status === "done"
           ? "done"

@@ -25,8 +25,8 @@ export function GlobalLiveFeed() {
   return null;
 }
 
-/** Waiting on you: a question open, or Claude stopped for an answer. */
-export const isWaiting = (session: LiveSession) => session.status === "waiting" || session.openInteractions > 0;
+/** Waiting on you: its terminal is up and a question is open, or Claude ended its turn for an answer. */
+export const isWaiting = (session: LiveSession) => session.live && (session.status === "waiting" || session.openInteractions > 0);
 
 /** The open sessions in the live panel's order, with their project. */
 function openSessions(projects: LiveProject[]): Array<{ project: LiveProject; session: LiveSession }> {

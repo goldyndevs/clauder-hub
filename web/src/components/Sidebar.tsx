@@ -100,7 +100,9 @@ export function StatusDot({ session }: { session: Session }) {
       ? "bg-severity-warning animate-status-pulse"
       : session.status === "running"
         ? "bg-success animate-status-pulse"
-        : session.status === "done"
+        : session.status === "idle"
+          ? "bg-success"
+          : session.status === "done"
           ? "border border-success bg-transparent"
           : "bg-muted-foreground/40";
   return <span className={cn("inline-block h-2 w-2 shrink-0 rounded-full", tone)} />;

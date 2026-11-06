@@ -12,6 +12,7 @@ import { withProject } from "./context.js";
 import { globalDb } from "./db.js";
 import { devRoutes } from "./devtools.js";
 import { fileRoutes } from "./fileRoutes.js";
+import { closeOpen } from "./interactions.js";
 import { watchRunExits } from "./jobs.js";
 import { ensureLayout, hubHome } from "./paths.js";
 import { addProject, bootGlobal, bootProjects, getProject, listProjects, stopProjects } from "./projects.js";
@@ -218,6 +219,8 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 onTerminalExit((terminal) => cleanRunFiles(terminal.token));
+// Whatever it was asking went with the process: nobody is waited on any more.
+onTerminalExit((terminal) => closeOpen(terminal.sessionId, "exit"));
 watchRunExits();
 
 console.log(`\n  ✳️  Clauder Hub`);

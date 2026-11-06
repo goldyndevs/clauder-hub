@@ -1,4 +1,5 @@
 import { bindProject } from "./context.js";
+import { broadcast } from "./events.js";
 import { closeOpen, createInteraction, listInteractions } from "./interactions.js";
 import { getSessionRow, setSessionStatus } from "./sessions.js";
 import { allTerminals, listTerminals, pressKeys, screenLines, type Terminal } from "./terminals.js";
@@ -71,6 +72,12 @@ async function check(): Promise<void> {
     if (terminal.finished || terminal.restarting) continue;
     const open = listInteractions({ sessionId: terminal.sessionId, status: "open" });
     const screen = await screenLines(terminal);
+    // Working or idle at its prompt: Claude Code shows "esc to interrupt" only while a turn runs.
+    const busy = squeeze(screen.join("\n")).includes("esctointerrupt");
+    if (terminal.busy !== busy) {
+      terminal.busy = busy;
+      broadcast("sessions", { sessionId: terminal.sessionId });
+    }
     const trustOpen = open.find((item) => item.data?.trust);
 
     if (showsTrustDialog(screen)) {

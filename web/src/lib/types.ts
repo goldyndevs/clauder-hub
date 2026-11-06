@@ -15,7 +15,8 @@ export interface ToolCall {
   error?: boolean;
 }
 
-export type SessionStatus = "running" | "waiting" | "done" | "exited" | "external";
+/** idle: its terminal is up but Claude is not working a turn and asks nothing (fresh, interrupted, or an answer put aside). */
+export type SessionStatus = "running" | "idle" | "waiting" | "done" | "exited" | "external";
 
 export interface Session {
   id: string;

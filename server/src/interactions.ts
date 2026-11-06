@@ -145,7 +145,7 @@ export function closeOpen(sessionId: string, by: string, kinds?: InteractionKind
   const update = db.prepare("UPDATE interactions SET status = 'closed', answered_by = ?, updated_at = ? WHERE id = ?");
   for (const item of open) {
     update.run(by, now(), item.id);
-    void acknowledgeOnChannels(item, by === "superseded" ? null : `Answered in the ${by}.`);
+    void acknowledgeOnChannels(item, by === "superseded" ? null : by === "exit" ? "The session ended." : `Answered in the ${by}.`);
   }
   broadcast("interactions", { sessionId });
 }

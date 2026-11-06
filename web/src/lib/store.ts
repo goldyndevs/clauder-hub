@@ -14,7 +14,7 @@ function landingSession(sessions: Session[]): Session | null {
   const latest = (list: Session[]) => [...list].sort((a, b) => (b.lastAt ?? b.startedAt ?? "").localeCompare(a.lastAt ?? a.startedAt ?? ""))[0] ?? null;
   return (
     latest(sessions.filter((session) => session.live && session.status === "waiting")) ??
-    latest(sessions.filter((session) => session.live && session.status === "running")) ??
+    latest(sessions.filter((session) => session.live && (session.status === "running" || session.status === "idle"))) ??
     latest(sessions.filter((session) => session.status === "done")) ??
     latest(sessions.filter((session) => !session.purpose))
   );
