@@ -354,6 +354,15 @@ function show(entry: Kept, host: HTMLElement): void {
   } catch {
     // Measured again on the next resize.
   }
+  // Taken off the page and put back, the browser resets the scrollbar to the top while xterm still
+  // shows where it was, so the first wheel jumps up. One line there and back makes xterm set it again.
+  requestAnimationFrame(() => {
+    const term = entry.term;
+    if (!entry.mounted || term.buffer.active.baseY === 0) return;
+    const step = term.buffer.active.viewportY > 0 ? -1 : 1;
+    term.scrollLines(step);
+    term.scrollLines(-step);
+  });
   entry.term.focus();
 }
 
