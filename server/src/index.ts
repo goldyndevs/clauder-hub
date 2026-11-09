@@ -222,7 +222,7 @@ server.on("upgrade", (req, socket, head) => {
 
 onTerminalExit((terminal) => cleanRunFiles(terminal.token));
 // Whatever it was asking went with the process: nobody is waited on any more.
-onTerminalExit((terminal) => closeOpen(terminal.sessionId, "exit"));
+onTerminalExit((terminal) => !terminal.stopping && closeOpen(terminal.sessionId, "exit"));
 watchRunExits();
 
 console.log(`\n  ✳️  Clauder Hub`);
@@ -251,7 +251,7 @@ void checkClaudeCode().then((status) => {
 console.log(`  ${underDev ? "api    " : "url    "} : http://localhost:${actualPort}${actualPort !== port ? `  (${port} was in use)` : ""}`);
 if (underDev) console.log(`  open    : http://localhost:${webPort}${opened}`);
 else if (opened) console.log(`  open    : http://localhost:${actualPort}${opened}`);
-console.log(`\n  Every project's sessions, cron jobs and webhooks run as long as this process. Ctrl+C stops the hub and them.\n`);
+console.log(`\n  Every project's sessions, cron jobs and webhooks run as long as this process. Ctrl+C stops the hub and them; they resume at its next start (a switch on the Global page).\n`);
 
 let stopping = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

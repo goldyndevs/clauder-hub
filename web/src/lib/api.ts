@@ -74,6 +74,8 @@ export const api = {
   hub: () => hubRequest<{ version: string; claudeStatus: ClaudeStatus | null }>("/hub"),
   /** Claude Code looked at again, after installing it or signing in. */
   checkClaude: () => hubRequest<ClaudeStatus>("/claude/check", { method: "POST" }),
+  resumeOnStart: () => hubRequest<{ on: boolean }>("/hub/resume-on-start"),
+  setResumeOnStart: (on: boolean) => hubRequest<{ on: boolean }>("/hub/resume-on-start", { method: "PUT", body: JSON.stringify({ on }) }),
   projects: () => hubRequest<ProjectInfo[]>("/projects"),
   addProject: (path: string) => hubRequest<ProjectInfo>("/projects", { method: "POST", body: JSON.stringify({ path }) }),
   openedProject: (id: string) => hubRequest(`/projects/${encodeURIComponent(id)}/open`, { method: "POST" }),

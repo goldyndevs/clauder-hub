@@ -461,7 +461,8 @@ function startNext(): boolean {
 /** A session's terminal closing settles its run and lets the next one start. */
 export function watchRunExits(): void {
   onTerminalExit((terminal) => {
-    if (terminal.restarting) return;
+    // Restarted at once, or the hub stopping (resumed at its next start): neither ends the session or its run.
+    if (terminal.restarting || terminal.stopping) return;
     const row = getSessionRow(terminal.sessionId);
     if (row && row.status !== "done") setSessionStatus(terminal.sessionId, "exited");
     if (row?.run_id) finishRun(row.run_id, row.status === "done" ? "done" : "exited");

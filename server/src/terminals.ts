@@ -36,6 +36,8 @@ export interface Terminal {
   restarting?: boolean;
   /** Closed by the hub because the task is done. */
   finished?: boolean;
+  /** Killed because the hub itself stops: its session is not ended, so the next start resumes it (resume.ts). */
+  stopping?: boolean;
   /** Claude is working a turn (its "esc to interrupt" line shows), read from the screen by watchdog.ts; unset until first read. */
   busy?: boolean;
 }
@@ -245,8 +247,12 @@ export function waitForExit(terminal: Terminal, timeoutMs = 10_000): Promise<voi
   });
 }
 
+/** The hub stopping: every terminal goes, their sessions left marked live for the next start. */
 export function killAll(): void {
-  for (const terminal of terminals.values()) killTerminal(terminal);
+  for (const terminal of terminals.values()) {
+    terminal.stopping = true;
+    killTerminal(terminal);
+  }
 }
 
 /** A project removed from the hub takes its sessions with it; returns them, to wait for their exits. */

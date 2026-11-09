@@ -275,6 +275,10 @@ export interface ClaudeStatus {
   version: string | null;
   loggedIn: boolean | null;
   account: string | null;
+  authMethod: string | null;
+  org: string | null;
+  plan: string | null;
+  loginExpiresAt: string | null;
   problem: "missing" | "broken" | "signedOut" | null;
   message: string | null;
   fix: string | null;

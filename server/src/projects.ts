@@ -8,6 +8,7 @@ import { broadcast } from "./events.js";
 import { startInteractionSweeper } from "./interactions.js";
 import { startWatchdog } from "./watchdog.js";
 import { advance, recoverRuns, startScheduler, stopScheduler } from "./jobs.js";
+import { leftRunning, resumeLeftRunning } from "./resume.js";
 import { claudeHome, hubHome, projectSlug, projectsDir } from "./paths.js";
 import { killProjectTerminals, waitForExit } from "./terminals.js";
 import { startTranscriptWatcher } from "./transcripts.js";
@@ -81,9 +82,11 @@ export function bootGlobal(): Project {
     db: openProjectDb(path.join(root, "hub.db")),
   };
   const stops = withProject(project, () => {
+    const left = leftRunning();
     recoverRuns();
     const list = [startTranscriptWatcher(), startInteractionSweeper(), startWatchdog(), stopChannels];
     startChannels({ device: false });
+    resumeLeftRunning(left);
     return list;
   });
   global = { project, stops };
@@ -168,6 +171,7 @@ function boot(row: Row): Project {
   const stops: Array<() => void> = [];
   try {
     withProject(project, () => {
+      const left = leftRunning();
       const stranded = recoverRuns();
       if (stranded) console.log(`  note    : ${row.name}: ${stranded} queued run(s) were running when the hub last stopped`);
       stops.push(startTranscriptWatcher(), startInteractionSweeper(), startWatchdog());
@@ -176,6 +180,7 @@ function boot(row: Row): Project {
       stops.push(stopScheduler);
       startScheduler();
       advance();
+      resumeLeftRunning(left);
     });
   } catch (error) {
     // Whatever had started stops again, or its timers would run on with no project to show for them.

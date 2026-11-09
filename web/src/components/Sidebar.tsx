@@ -231,7 +231,7 @@ const HUB_TASKS: Array<{ kind: PurposeKind; label: string; icon: typeof Bell }> 
  * arrow at its end offers the same or a hub task (a Claude session for one
  * configuration job).
  */
-function NewSessionButton({ beside, size = "sm", full = false }: { beside: number; size?: "sm" | "md"; full?: boolean }) {
+function NewSessionButton({ beside, size = "sm", full = false, quiet = false }: { beside: number; size?: "sm" | "md"; full?: boolean; quiet?: boolean }) {
   const { starting, newSession } = useNewSession(beside);
   const { starting: startingTask, start } = usePurpose();
   const [open, setOpen] = useState(false);
@@ -240,9 +240,12 @@ function NewSessionButton({ beside, size = "sm", full = false }: { beside: numbe
     setOpen(false);
     void run();
   };
+  // Quiet: inside a sidebar tab, a low muted bar rather than the page's primary action.
+  const variant = quiet ? "muted" : "primary";
+  const low = quiet ? "py-1" : "";
   return (
     <div className={cn("flex", full && "w-full")}>
-      <Button variant="primary" size={size} className="flex-1 rounded-r-none" disabled={busy} onClick={() => void newSession()} aria-label="New session">
+      <Button variant={variant} size={size} className={cn("flex-1 rounded-r-none", low)} disabled={busy} onClick={() => void newSession()} aria-label="New session">
         <Plus size={size === "md" ? 14 : 13} /> {busy ? "Starting..." : "New session"}
       </Button>
       <Popover
@@ -251,7 +254,14 @@ function NewSessionButton({ beside, size = "sm", full = false }: { beside: numbe
         align="end"
         className="w-56 p-1"
         trigger={
-          <Button variant="primary" size={size} className="rounded-l-none border-l border-primary-foreground/25 px-2" disabled={busy} aria-label="More ways to start" title="Plain session or hub task">
+          <Button
+            variant={variant}
+            size={size}
+            className={cn("rounded-l-none border-l px-2", quiet ? "border-foreground/10" : "border-primary-foreground/25", low)}
+            disabled={busy}
+            aria-label="More ways to start"
+            title="Plain session or hub task"
+          >
             <ChevronDown size={14} />
           </Button>
         }
@@ -301,6 +311,7 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
   const [folded, toggleGroup] = useFolded();
   const [tab, setTab] = useSidebarTab();
   const { starting, newSession } = useNewSession(drawer ? 0 : collapsed ? 48 : Number(width));
+  const sideWidth = collapsed ? 48 : typeof width === "number" ? width : 280;
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -377,10 +388,6 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
         )}
       </div>
 
-      <div className="px-3 pb-2">
-        <NewSessionButton beside={collapsed ? 48 : typeof width === "number" ? width : 280} size="md" full />
-      </div>
-
       {/* Three tabs: the sessions themselves, everything around them, and the project's files. */}
       <div className="mx-3 mb-2 flex rounded-md bg-muted p-0.5">
         {(
@@ -415,6 +422,9 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
           <FileTree />
         ) : tab === "workspace" ? (
           <nav className="px-2">
+            <div className="px-1 pb-1">
+              <NewSessionButton beside={sideWidth} full quiet />
+            </div>
             {NAV_GROUPS.map((group) => {
               const isFolded = folded.has(group.id);
               const holdsActive = group.items.some((item) => isActive(item.page));
@@ -459,6 +469,9 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
                 <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sessions" className="pl-6" />
               </div>
+              <div className="mt-1.5">
+                <NewSessionButton beside={sideWidth} full quiet />
+              </div>
             </div>
             <div className="px-2">
               <div ref={liveRef}>
@@ -474,7 +487,7 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
                   </label>
                 }
               />
-              {!filtered.length && <div className="px-2 pt-3 text-xs text-muted-foreground">{query ? "No match." : "No sessions yet. Start one above."}</div>}
+              {!filtered.length && <div className="px-2 pt-3 text-xs text-muted-foreground">{query ? "No match." : "No sessions yet. Start one with New session above."}</div>}
             </div>
           </>
         )}

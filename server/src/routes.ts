@@ -19,6 +19,7 @@ import { projectRoot, runDir, toolVersion, transcriptsDir } from "./paths.js";
 import { addProject, allProjects, getProject, listProjects, removeProject, touchProject } from "./projects.js";
 import { promptDefinitions, renderPrompt, setPrompt } from "./prompts.js";
 import { closeOpenSessions, getSessionRow, hubUrl, listSessions, openSessionIds, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
+import { resumeOnStart, setResumeOnStart } from "./resume.js";
 import { killTerminal, terminalForSession } from "./terminals.js";
 import { isPurpose, purposeNote, purposeTitle } from "./purposes.js";
 import { deleteSession, deletionPlan, setSessionTitle } from "./sessionFiles.js";
@@ -189,6 +190,10 @@ hubApi.get(
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   ),
 );
+
+/** Whether the sessions running when the hub stops are resumed when it starts. */
+hubApi.get("/hub/resume-on-start", wrap(() => ({ on: resumeOnStart() })));
+hubApi.put("/hub/resume-on-start", wrap((req) => ({ on: setResumeOnStart(req.body?.on !== false) })));
 
 /** Whether the global channels hear from a project. */
 hubApi.put("/global/muted/:id", wrap((req) => ({ muted: setMuted(req.params.id, req.body?.muted === true) })));

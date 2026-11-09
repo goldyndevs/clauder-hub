@@ -73,6 +73,11 @@ export interface ClaudeStatus {
   version: string | null;
   loggedIn: boolean | null;
   account: string | null;
+  /** From `claude auth status`, when it says: how it signs in, the organisation, the plan, when the login runs out. */
+  authMethod: string | null;
+  org: string | null;
+  plan: string | null;
+  loginExpiresAt: string | null;
   problem: "missing" | "broken" | "signedOut" | null;
   message: string | null;
   fix: string | null;
@@ -97,7 +102,7 @@ let checking: Promise<ClaudeStatus> | null = null;
 async function check(): Promise<ClaudeStatus> {
   cached = undefined;
   const found = findClaudeCode();
-  const base = { path: found, version: null, loggedIn: null, account: null, checkedAt: Date.now() };
+  const base = { path: found, version: null, loggedIn: null, account: null, authMethod: null, org: null, plan: null, loginExpiresAt: null, checkedAt: Date.now() };
   if (!found) {
     return { ...base, problem: "missing", message: "Claude Code is not installed on this machine.", fix: "npm i -g @anthropic-ai/claude-code" };
   }
@@ -108,10 +113,17 @@ async function check(): Promise<ClaudeStatus> {
   const auth = await run(found, ["auth", "status"]);
   let loggedIn: boolean | null = null;
   let account: string | null = null;
+  const about = { authMethod: null as string | null, org: null as string | null, plan: null as string | null, loginExpiresAt: null as string | null };
+  // Private output: every field read defensively.
+  const text = (value: unknown) => (typeof value === "string" && value ? value : null);
   try {
-    const parsed = JSON.parse(auth.out) as { loggedIn?: boolean; email?: string; authMethod?: string };
+    const parsed = JSON.parse(auth.out) as Record<string, unknown>;
     if (typeof parsed.loggedIn === "boolean") loggedIn = parsed.loggedIn;
-    account = parsed.email ?? parsed.authMethod ?? null;
+    account = text(parsed.email) ?? text(parsed.authMethod);
+    about.authMethod = text(parsed.authMethod);
+    about.org = text(parsed.orgName);
+    about.plan = text(parsed.subscriptionType);
+    about.loginExpiresAt = text(parsed.loginExpiresAt);
   } catch {
     // An older Claude Code without the command: whether it is signed in is left unknown.
   }
@@ -121,6 +133,7 @@ async function check(): Promise<ClaudeStatus> {
     version: version.out.trim().split(/\s/)[0] || null,
     loggedIn,
     account,
+    ...about,
     problem: signedOut ? "signedOut" : null,
     message: signedOut ? "Claude Code is installed but not signed in." : null,
     fix: signedOut ? "claude auth login" : null,

@@ -1,4 +1,4 @@
-import { ArrowRight, Bell, BellOff, CalendarClock, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, CalendarClock, RefreshCw, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -16,6 +16,7 @@ import { ResizeHandle } from "./ResizeHandle";
 import { SessionView } from "./SessionView";
 import { StatusDot } from "./Sidebar";
 import { Button } from "./ui/Button";
+import { Checkbox } from "./ui/Checkbox";
 import { Empty } from "./ui/Empty";
 import { ClaudeBanner } from "./ClaudeBanner";
 import { Tooltip } from "./ui/Tooltip";
@@ -213,6 +214,20 @@ function Scroll({ children }: { children: ReactNode }) {
   );
 }
 
+/** The hub's one preference about its own restarts: what was running comes back. */
+function ResumeOnStartToggle() {
+  const setting = useLive(() => api.resumeOnStart(), []);
+  if (!setting.data) return null;
+  return (
+    <Checkbox
+      label="Resume running sessions after a restart"
+      title="Sessions still running when the hub stops (Ctrl+C, a closed window, a crash) are resumed when it starts again; queued runs go back on the queue."
+      checked={setting.data.on}
+      onCheckedChange={(on) => void attempt(() => api.setResumeOnStart(on), on ? "Sessions will be resumed after a restart." : "Sessions stay stopped after a restart.").then(setting.reload)}
+    />
+  );
+}
+
 /** #/global/overview: every project's card. */
 function GlobalProjects() {
   const [picking, setPicking] = useState(false);
@@ -224,9 +239,12 @@ function GlobalProjects() {
         title="Projects"
         description="Every project in the hub, most recently opened first. The bell says whether the global channels hear from it."
         action={
-          <Button variant="primary" onClick={() => setPicking(true)}>
-            <Plus size={12} /> Open folder...
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <ResumeOnStartToggle />
+            <Button variant="primary" onClick={() => setPicking(true)}>
+              <Plus size={12} /> Open folder...
+            </Button>
+          </div>
         }
       />
       <OpenFolderDialog open={picking} onOpenChange={setPicking} />
@@ -260,6 +278,76 @@ function GlobalInbox() {
         <Empty icon={Bell} title={inbox.data ? "Nothing is waiting on you." : "Loading..."} />
       )}
     </Scroll>
+  );
+}
+
+const PLAN_LABEL: Record<string, string> = { pro: "Pro", max: "Max", team: "Team", enterprise: "Enterprise", free: "Free" };
+
+/**
+ * Claude Code as this machine runs it, at the foot of the global sidebar: who
+ * is signed in and on what plan, until when, which version, and how much the
+ * hub's sessions used today. Read from `claude auth status` and the transcripts.
+ */
+function ClaudeInfo() {
+  const hub = useLive(() => api.hub(), []);
+  const overview = useLive(() => api.globalOverview(), ["sessions", "projects"]);
+  const [checking, setChecking] = useState(false);
+  const status = hub.data?.claudeStatus ?? null;
+  const recheck = async () => {
+    setChecking(true);
+    await attempt(() => api.checkClaude());
+    setChecking(false);
+    hub.reload();
+  };
+  const tokens = (overview.data ?? []).reduce((total, project) => total + project.tokensToday, 0);
+  const active = (overview.data ?? []).reduce((total, project) => total + project.activeToday, 0);
+  const expires = status?.loginExpiresAt ? Date.parse(status.loginExpiresAt) : null;
+  const daysLeft = expires ? Math.ceil((expires - Date.now()) / 86_400_000) : null;
+  const plan = status?.plan ? (PLAN_LABEL[status.plan] ?? status.plan) : null;
+  const signedIn = status?.loggedIn !== false && !status?.problem;
+
+  return (
+    <div className="space-y-1 border-t px-3 py-2.5 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-1.5">
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", !status ? "bg-muted-foreground/40" : signedIn ? "bg-success" : "bg-severity-critical")} />
+        <span className="font-medium text-foreground">Claude Code</span>
+        {status?.version && <span className="font-mono">v{status.version}</span>}
+        <button onClick={() => void recheck()} disabled={checking} title="Ask Claude Code again" aria-label="Check Claude Code again" className="ml-auto rounded p-0.5 hover:bg-muted hover:text-foreground disabled:opacity-50">
+          <RefreshCw size={11} className={cn(checking && "animate-spin")} />
+        </button>
+      </div>
+      {!status ? (
+        <div>Checking...</div>
+      ) : status.problem ? (
+        <div className="text-severity-critical" title={status.fix ? `Fix: ${status.fix}` : undefined}>
+          {status.message}
+          {status.fix && <code className="mt-0.5 block font-mono text-foreground">{status.fix}</code>}
+        </div>
+      ) : (
+        <>
+          {status.account && (
+            <div className="truncate" title={status.account}>
+              {status.account}
+            </div>
+          )}
+          {(status.org || plan) && (
+            <div className="truncate" title={[status.org, plan && `${plan} plan`].filter(Boolean).join(" · ")}>
+              {[status.org, plan && `${plan} plan`].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          {daysLeft !== null && (
+            <div className={cn(daysLeft <= 7 && "text-severity-warning")} title={`Sign-in expires ${when(status.loginExpiresAt!)}; claude auth login renews it.`}>
+              {daysLeft <= 0 ? "Sign-in expired: run claude auth login" : `Sign-in valid ${daysLeft} more day${daysLeft > 1 ? "s" : ""}`}
+            </div>
+          )}
+        </>
+      )}
+      {overview.data && (
+        <div title="Sent and written by the hub's sessions active today, cache reads left out">
+          Today: {compact(tokens)} tokens · {active} session{active === 1 ? "" : "s"}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -336,12 +424,7 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
         </nav>
 
         <div className="mt-2 px-2">
-          <div className="flex items-center px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Projects
-            <button onClick={() => setPicking(true)} title="Open folder..." aria-label="Add a project" className="ml-auto rounded p-0.5 hover:bg-muted hover:text-foreground">
-              <Plus size={12} />
-            </button>
-          </div>
+          <div className="px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Projects</div>
           {menu && <ProjectMenu project={menu.project} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
           {(projects.data ?? []).map((project) => (
             <button
@@ -367,7 +450,15 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
               )}
             </button>
           ))}
-          {projects.data && !projects.data.length && <div className="px-2 py-1 text-[11px] text-muted-foreground">No projects yet.</div>}
+          <button
+            onClick={() => setPicking(true)}
+            title="Open a folder as a project"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            <Plus size={14} className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate">Add project...</span>
+          </button>
+          <OpenFolderDialog open={picking} onOpenChange={setPicking} />
         </div>
 
         {tasks.length > 0 && (
@@ -391,12 +482,7 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
         )}
       </div>
 
-      <div className="border-t px-2 py-2">
-        <Button variant="ghost" className="w-full justify-start" onClick={() => setPicking(true)}>
-          <Plus size={13} /> Open folder...
-        </Button>
-        <OpenFolderDialog open={picking} onOpenChange={setPicking} />
-      </div>
+      <ClaudeInfo />
     </aside>
   );
 }

@@ -57,6 +57,11 @@ channels (Slack, Telegram, webhooks) that relay what sessions ask.
   Code writes. The format is private: read every field defensively, and
   dedupe usage by `message.id` (one line per content block repeats it) and a
   fork's inherited lines against its parent.
+- **A restart picks up where it stopped.** Stopping the hub kills its
+  terminals with `stopping` set, so their sessions stay marked live; at the
+  next start (`resume.ts`, before `recoverRuns`) those, and any a crash left,
+  are resumed: a run back on the queue, any other session on `--resume`.
+  One switch on the Global page (`hub_settings` in the global database).
 - **One queue per project.** Every triggered run goes through `jobs.ts`
   `enqueue`; up to `maxRuns()` of a project's runs run side by side (settings
   key `maxRuns`, 1 unless changed with the gear on the Automation tabs);
