@@ -329,7 +329,7 @@ export function stopRun(id: string): void {
 
 /**
  * Queues a stopped run again to carry on its own session (claude --resume),
- * at the back of the line, so it never runs beside another run of the project.
+ * at the back of the line, within the project's limit of runs at a time.
  */
 export function resumeRun(id: string): { run: Run; position: number } {
   const run = listRuns(500).find((item) => item.id === id);
@@ -374,59 +374,87 @@ function advanceSoon(ms: number): void {
 /** Projects whose queue waits for Claude Code to be installed or signed in, with one retry timer each. */
 const waitingForClaude = new Set<string>();
 
-/** Starts the oldest queued run when nothing queued is running. */
+/** How many of this project's runs may run side by side (the settings key 'maxRuns'); 1 unless changed. */
+export const MAX_RUNS_LIMIT = 10;
+export function maxRuns(): number {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'maxRuns'").get() as { value: string } | undefined;
+  const n = Number(row?.value);
+  return Number.isInteger(n) && n >= 1 ? Math.min(n, MAX_RUNS_LIMIT) : 1;
+}
+
+export function setMaxRuns(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_RUNS_LIMIT) throw new Error(`Runs at a time is a whole number from 1 to ${MAX_RUNS_LIMIT}.`);
+  db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('maxRuns', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").run(String(n), now());
+  broadcast("runs", {});
+  // A higher limit lets queued runs start now.
+  advance();
+  return n;
+}
+
+/** Starts the oldest queued runs while fewer than maxRuns() of the project's runs are running. */
 export function advance(): void {
   if (advancing) return;
   advancing = true;
   try {
-    const running = db.prepare("SELECT id FROM runs WHERE status = 'running' LIMIT 1").get();
-    if (running) return;
-    const next = db.prepare(`SELECT * FROM runs WHERE status = 'queued' ORDER BY ${IN_LINE} LIMIT 1`).get() as RunRow | undefined;
-    if (!next) return;
-    const job = next.job_id ? getJob(next.job_id) : null;
-    try {
-      // A resumed run carries on its own conversation; it keeps its unattended mode and toolset from the session row.
-      const terminal = next.resume && next.session_id
-        ? startSession({ resumeId: next.session_id, prompt: promptText("typed.resumeRun"), runId: next.id, permissionMode: claudeSettings().runPermissionMode })
-        : startSession({
-        prompt: next.prompt,
-        origin: next.source === "manual" ? "queue" : next.source,
-        runId: next.id,
-        category: next.category || "auto",
-        // Unattended runs use their own mode from Claude settings; "" leaves it to the user's settings.
-        permissionMode: claudeSettings().runPermissionMode,
-        // A job's own preset; without one, startSession falls back to the default preset.
-        toolset: job?.presetId ? getPreset(job.presetId)?.toolset : undefined,
-        name: job ? `${job.name} ${new Date().toISOString().slice(0, 16).replace("T", " ")}` : undefined,
-      });
-      db.prepare("UPDATE runs SET status = 'running', session_id = ?, started_at = ? WHERE id = ?").run(terminal.sessionId, now(), next.id);
-    } catch (error) {
-      // Claude Code missing or signed out is fixed on the machine, not in the run: it waits queued and is tried again.
-      if (error instanceof ClaudeMissing) {
-        if (!waitingForClaude.has(currentProject().id)) {
-          waitingForClaude.add(currentProject().id);
-          console.error("[queue] waiting for Claude Code:", error.message);
-          const retry = bindProject(() => {
-            waitingForClaude.delete(currentProject().id);
-            advance();
-          });
-          setTimeout(() => {
-            try {
-              retry();
-            } catch (failure) {
-              console.error("[queue]", (failure as Error).message);
-            }
-          }, 60_000);
-        }
-        return;
-      }
-      console.error("[queue] could not start a run:", (error as Error).message);
-      db.prepare("UPDATE runs SET status = 'exited', finished_at = ? WHERE id = ?").run(now(), next.id);
-      advanceSoon(1000);
+    while (startNext()) {
+      // Each pass starts one run; it stops when the project is full, the queue is empty or a start failed.
     }
-    broadcast("runs", {});
   } finally {
     advancing = false;
+  }
+}
+
+/** Starts the oldest queued run if there is room; true when one started. */
+function startNext(): boolean {
+  const running = (db.prepare("SELECT COUNT(*) AS n FROM runs WHERE status = 'running'").get() as { n: number }).n;
+  if (running >= maxRuns()) return false;
+  const next = db.prepare(`SELECT * FROM runs WHERE status = 'queued' ORDER BY ${IN_LINE} LIMIT 1`).get() as RunRow | undefined;
+  if (!next) return false;
+  const job = next.job_id ? getJob(next.job_id) : null;
+  try {
+    // A resumed run carries on its own conversation; it keeps its unattended mode and toolset from the session row.
+    const terminal = next.resume && next.session_id
+      ? startSession({ resumeId: next.session_id, prompt: promptText("typed.resumeRun"), runId: next.id, permissionMode: claudeSettings().runPermissionMode })
+      : startSession({
+      prompt: next.prompt,
+      origin: next.source === "manual" ? "queue" : next.source,
+      runId: next.id,
+      category: next.category || "auto",
+      // Unattended runs use their own mode from Claude settings; "" leaves it to the user's settings.
+      permissionMode: claudeSettings().runPermissionMode,
+      // A job's own preset; without one, startSession falls back to the default preset.
+      toolset: job?.presetId ? getPreset(job.presetId)?.toolset : undefined,
+      name: job ? `${job.name} ${new Date().toISOString().slice(0, 16).replace("T", " ")}` : undefined,
+    });
+    db.prepare("UPDATE runs SET status = 'running', session_id = ?, started_at = ? WHERE id = ?").run(terminal.sessionId, now(), next.id);
+    broadcast("runs", {});
+    return true;
+  } catch (error) {
+    // Claude Code missing or signed out is fixed on the machine, not in the run: it waits queued and is tried again.
+    if (error instanceof ClaudeMissing) {
+      if (!waitingForClaude.has(currentProject().id)) {
+        waitingForClaude.add(currentProject().id);
+        console.error("[queue] waiting for Claude Code:", error.message);
+        const retry = bindProject(() => {
+          waitingForClaude.delete(currentProject().id);
+          advance();
+        });
+        setTimeout(() => {
+          try {
+            retry();
+          } catch (failure) {
+            console.error("[queue]", (failure as Error).message);
+          }
+        }, 60_000);
+      }
+      return false;
+    }
+    console.error("[queue] could not start a run:", (error as Error).message);
+    db.prepare("UPDATE runs SET status = 'exited', finished_at = ? WHERE id = ?").run(now(), next.id);
+    broadcast("runs", {});
+    advanceSoon(1000);
+    return false;
   }
 }
 

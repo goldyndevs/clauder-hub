@@ -418,3 +418,24 @@ export interface McpCatalogEntry {
   docs: string;
   installed: boolean;
 }
+
+/** A value Claude Code gets from its own files: an MCP server's env or header, or a settings env. */
+export interface Variable {
+  id: string;
+  name: string;
+  file: string;
+  scope: "user" | "project" | "local";
+  where: string;
+  server: string | null;
+  /** Plain when not a secret, masked when it is. */
+  shown: string;
+  secret: boolean;
+  reference: string | null;
+  resolved: boolean | null;
+  kind: string | null;
+  expiresAt: string | null;
+  expirySource: "token" | "check" | "noted" | null;
+  check: { at: string; ok: boolean; detail: string; expiresAt: string | null } | null;
+  checkable: boolean;
+  editable: boolean;
+}

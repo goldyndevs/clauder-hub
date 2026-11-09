@@ -1,4 +1,4 @@
-import { CalendarClock, CircleHelp, Pencil, Play, Plus, RefreshCw, Square, StepForward, Trash2, Webhook, X } from "lucide-react";
+import { CalendarClock, CircleHelp, Pencil, Play, Plus, RefreshCw, Settings, Square, StepForward, Trash2, Webhook, X } from "lucide-react";
 import { useState } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -6,8 +6,8 @@ import { projectApi } from "../lib/project";
 import { ago, when } from "../lib/format";
 import { attempt, useLive, useStore } from "../lib/store";
 import type { Job, JobParam, ParamValues, Run } from "../lib/types";
-import { usePurpose } from "../lib/usePurpose";
 import { useConfirm } from "./Confirm";
+import { JobForm, RunForm } from "./HubForms";
 import { Button } from "./ui/Button";
 import { CopyButton } from "./ui/CopyId";
 import { Checkbox } from "./ui/Checkbox";
@@ -20,13 +20,16 @@ type Tab = "jobs" | "queue";
 const TAB_KEY = "clauder-hub:automation-tab";
 
 /**
- * Cron jobs and webhooks, and the one queue they feed. Creating and changing
- * them happens in a Claude session for that purpose, not in a form.
+ * Cron jobs and webhooks, and the one queue they feed. Created and changed on
+ * a form, which can hand over to a Claude session instead.
  */
 export function AutomationPage() {
   const jobs = useLive(() => api.jobs(), ["jobs"]);
   const runs = useLive(() => api.runs(), ["runs"]);
-  const { starting, start } = usePurpose();
+  const queue = useLive(() => api.queueSettings(), ["runs"]);
+  const atATime = queue.data?.maxRuns ?? 1;
+  const subtitle = `Cron and webhook runs, ${atATime === 1 ? "one session at a time" : `up to ${atATime} sessions at a time`}, while the hub runs.`;
+  const [form, setForm] = useState<{ kind: "job"; job?: Job } | { kind: "run" } | null>(null);
   const [tab, setTab] = useState<Tab>(() => {
     try {
       return localStorage.getItem(TAB_KEY) === "queue" ? "queue" : "jobs";
@@ -46,18 +49,20 @@ export function AutomationPage() {
 
   return (
     <div className="h-full overflow-y-auto">
+      {form?.kind === "job" && <JobForm job={form.job} onClose={() => setForm(null)} />}
+      {form?.kind === "run" && <RunForm onClose={() => setForm(null)} />}
       <div className="space-y-4 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1 basis-48">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Operation</div>
             <h1 className="text-base font-semibold">Automation</h1>
-            <p className="truncate text-xs text-muted-foreground" title="Cron and webhook runs, one session at a time, while the hub runs.">Cron and webhook runs, one session at a time, while the hub runs.</p>
+            <p className="truncate text-xs text-muted-foreground" title={subtitle}>{subtitle}</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <Button disabled={starting} onClick={() => void start("queue-run")} title="Opens a Claude session to queue a run">
+            <Button onClick={() => setForm({ kind: "run" })}>
               <Play size={12} /> Queue a run
             </Button>
-            <Button variant="primary" disabled={starting} onClick={() => void start("create-job")} title="Opens a Claude session to create a job">
+            <Button variant="primary" onClick={() => setForm({ kind: "job" })}>
               <Plus size={12} /> New job
             </Button>
           </div>
@@ -91,13 +96,14 @@ export function AutomationPage() {
               </span>
             </button>
           ))}
+          <QueueSettings maxRuns={atATime} limit={queue.data?.limit ?? 10} />
         </div>
 
         {tab === "jobs" ? (
           jobs.data?.length ? (
             <div className="divide-y rounded-md border">
               {jobs.data.map((job) => (
-                <JobRow key={job.id} job={job} onEdit={() => void start("edit-job", job.id)} />
+                <JobRow key={job.id} job={job} onEdit={() => setForm({ kind: "job", job })} />
               ))}
             </div>
           ) : (
@@ -110,6 +116,47 @@ export function AutomationPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/** Gear beside the tabs: how many of this project's runs may run side by side. */
+function QueueSettings({ maxRuns, limit }: { maxRuns: number; limit: number }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(String(maxRuns));
+  const n = Number(value);
+  const valid = Number.isInteger(n) && n >= 1 && n <= limit;
+  return (
+    <Popover
+      align="start"
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setValue(String(maxRuns));
+      }}
+      className="w-64 space-y-2 text-[11px]"
+      trigger={
+        <button className="flex shrink-0 items-center self-center rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title={`Runs at a time: ${maxRuns}`} aria-label="Queue settings">
+          <Settings size={13} />
+        </button>
+      }
+    >
+      <div className="text-xs font-semibold">Runs at a time</div>
+      <p className="text-muted-foreground">How many queued runs of this project may run side by side. The rest wait in the queue.</p>
+      <form
+        className="flex items-center gap-1.5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!valid) return;
+          void attempt(() => api.saveQueueSettings(n), `Up to ${n} run${n === 1 ? "" : "s"} at a time`).then((saved) => {
+            if (saved) setOpen(false);
+          });
+        }}
+      >
+        <Input type="number" min={1} max={limit} value={value} onChange={(event) => setValue(event.target.value)} className="h-7 w-20" autoFocus />
+        <Button type="submit" variant="primary" disabled={!valid || n === maxRuns}>Save</Button>
+      </form>
+      {!valid && <p className="text-destructive">A whole number from 1 to {limit}.</p>}
+    </Popover>
   );
 }
 
@@ -150,7 +197,7 @@ function JobRow({ job, onEdit }: { job: Job; onEdit: () => void }) {
             }}>
             <Play size={13} />
           </Button>
-          <Button variant="ghost" size="icon" title="Edit with Claude" onClick={onEdit}>
+          <Button variant="ghost" size="icon" title="Edit" onClick={onEdit}>
             <Pencil size={13} />
           </Button>
           <Button

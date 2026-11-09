@@ -11,7 +11,7 @@ import { ChannelsPage } from "./ChannelsPage";
 import { InteractionCard } from "./InteractionCard";
 import { PageHeader } from "./Page";
 import { useConfirm } from "./Confirm";
-import { LogoLink, OpenFolderDialog, ProjectSwitcher, TitleLink } from "./Projects";
+import { LogoLink, OpenFolderDialog, TitleLink } from "./Projects";
 import { ResizeHandle } from "./ResizeHandle";
 import { SessionView } from "./SessionView";
 import { StatusDot } from "./Sidebar";
@@ -310,7 +310,6 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
           <TitleLink />
           <div className="flex min-w-0 items-center gap-1.5">
             <span className="truncate text-[11px] text-muted-foreground">Global</span>
-            <ProjectSwitcher />
           </div>
         </div>
         <Button variant="ghost" size="icon" className="ml-auto" onClick={onToggle} aria-label={drawer ? "Close menu" : "Collapse sidebar"}>

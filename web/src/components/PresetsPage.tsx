@@ -20,7 +20,6 @@ const EMPTY: Omit<Preset, "id"> = { name: "", toolset: { agents: [], skills: [],
 export function PresetsPage() {
   const presets = useLive(() => api.presets(), ["jobs"]);
   const catalog = useLive(() => api.toolsetCatalog(), []);
-  const { starting, start } = usePurpose();
   const [selected, setSelected] = useState<string | "new" | null>(null);
   // Below md the list and the editor take turns.
   const [showDetail, setShowDetail] = useState(false);
@@ -40,7 +39,7 @@ export function PresetsPage() {
           title="Toolset presets"
           description="Named sets of agents, skills, MCP servers and plugins to turn off."
           action={
-            <Button variant="primary" disabled={starting} onClick={() => void start("create-preset")} title="Opens a Claude session to describe the preset">
+            <Button variant="primary" onClick={() => choose("new")}>
               <Plus size={12} /> New preset
             </Button>
           }
@@ -129,11 +128,14 @@ function PresetEditor({
           <Checkbox label="Default for new sessions and jobs" checked={draft.isDefault} onCheckedChange={(value) => setDraft({ ...draft, isDefault: value })} />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {preset.id && (
-            <Button variant="ghost" disabled={starting} onClick={() => void start("edit-preset", preset.id)} title="Describe the change to Claude instead of flipping switches">
-              <Sparkles size={12} /> Edit with Claude
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            disabled={starting}
+            onClick={() => void start(preset.id ? "edit-preset" : "create-preset", preset.id, { name: draft.name, isDefault: draft.isDefault, toolset: draft.toolset })}
+            title="Opens a Claude session with what is set here; describe the rest instead of flipping switches"
+          >
+            <Sparkles size={12} /> {starting ? "Opening..." : "Set up with Claude"}
+          </Button>
           {preset.id && (
             <Button variant="ghost" onClick={() => void remove()}>
               <Trash2 size={12} /> Delete

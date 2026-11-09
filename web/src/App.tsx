@@ -16,6 +16,7 @@ import { OverviewPage } from "./components/OverviewPage";
 import { PresetsPage } from "./components/PresetsPage";
 import { DefinitionsPage, HooksPage, InstructionsPage, McpServersPage, PluginsPage } from "./components/ProjectPages";
 import { ResizeHandle } from "./components/ResizeHandle";
+import { VariablesPage } from "./components/VariablesPage";
 import { SessionView } from "./components/SessionView";
 import { GlobalLiveFeed, ShortcutKeys, useWaitingCount } from "./components/Shortcuts";
 import { FileTabs } from "./components/FileTabs";
@@ -71,6 +72,7 @@ const PAGE_VIEW: Record<Page, () => ReactNode> = {
   skills: () => <DefinitionsPage key="skills" kind="skills" />,
   commands: () => <DefinitionsPage key="commands" kind="commands" />,
   "mcp-servers": () => <McpServersPage />,
+  variables: () => <VariablesPage />,
   hooks: () => <HooksPage />,
   plugins: () => <PluginsPage />,
   channels: () => <ChannelsPage />,

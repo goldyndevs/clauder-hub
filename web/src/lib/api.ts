@@ -27,6 +27,7 @@ import type {
   Stats,
   Suggestion,
   Toolset,
+  Variable,
 } from "./types";
 import { projectApi } from "./project";
 
@@ -106,9 +107,9 @@ export const api = {
   session: (id: string) => request<SessionDetail>(`/sessions/${id}`),
   startSession: (body: { prompt?: string; category?: string; name?: string; permissionMode?: string } & TerminalSize) =>
     post<{ sessionId: string; terminalId: string }>("/sessions", body),
-  /** Opens a Claude session for one configuration task; the hub has no forms. */
-  startPurpose: (kind: PurposeKind, targetId?: string, size: TerminalSize = {}) =>
-    post<{ sessionId: string; terminalId: string }>("/purpose-sessions", { kind, targetId, ...size }),
+  /** Opens a Claude session for one configuration task; a form hands over what it had as the draft. */
+  startPurpose: (kind: PurposeKind, targetId?: string, size: TerminalSize = {}, draft?: Record<string, unknown>) =>
+    post<{ sessionId: string; terminalId: string }>("/purpose-sessions", { kind, targetId, draft, ...size }),
   resumeSession: (id: string, size: TerminalSize = {}) => post<{ sessionId: string; terminalId: string }>(`/sessions/${id}/resume`, size),
   /** With a project id, a session of that project rather than the open one (the live panel). */
   killSession: (id: string, projectId?: string) =>
@@ -168,6 +169,8 @@ export const api = {
   runJob: (id: string, params?: ParamValues) => post(`/jobs/${id}/run`, { params }),
 
   runs: () => request<Run[]>("/runs"),
+  queueSettings: () => request<{ maxRuns: number; limit: number }>("/queue-settings"),
+  saveQueueSettings: (maxRuns: number) => put<{ maxRuns: number; limit: number }>("/queue-settings", { maxRuns }),
   queueRun: (prompt: string, category: string) => post("/runs", { prompt, category }),
   cancelRun: (id: string) => post(`/runs/${id}/cancel`),
   stopRun: (id: string) => post(`/runs/${id}/stop`),
@@ -176,6 +179,11 @@ export const api = {
   toolsetCatalog: () => request<CatalogItem[]>("/toolset/catalog"),
   setSessionToolset: (id: string, toolset: Toolset) => put<{ restarted: boolean; terminalId?: string }>(`/sessions/${id}/toolset`, { toolset }),
   setSessionSetup: (id: string, setup: SessionSetup) => put<{ restarted: boolean; terminalId?: string }>(`/sessions/${id}/setup`, setup),
+  variables: () => request<Variable[]>("/variables"),
+  variableValue: (id: string) => request<{ value: string | null }>(`/variables/${id}/value`),
+  saveVariable: (id: string, value: string) => put<Variable>(`/variables/${id}`, { value }),
+  setVariableExpiry: (id: string, expiresAt: string | null) => put<Variable>(`/variables/${id}/expiry`, { expiresAt }),
+  checkVariable: (id: string) => post<Variable>(`/variables/${id}/check`),
   presets: () => request<Preset[]>("/presets"),
   savePreset: (preset: Partial<Preset> & { name: string; toolset: Toolset }) =>
     preset.id ? put<Preset>(`/presets/${preset.id}`, preset) : post<Preset>("/presets", preset),

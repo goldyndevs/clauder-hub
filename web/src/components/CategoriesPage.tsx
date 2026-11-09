@@ -1,10 +1,11 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { api } from "../lib/api";
 import { useLive } from "../lib/store";
 import type { Category } from "../lib/types";
-import { usePurpose } from "../lib/usePurpose";
 import { Section } from "./Charts";
 import { useConfirm } from "./Confirm";
+import { CategoryForm } from "./HubForms";
 import { Button } from "./ui/Button";
 import { Empty } from "./ui/Empty";
 import { StatusBadge } from "./ui/StatusBadge";
@@ -32,15 +33,16 @@ const STARTERS: Array<Omit<Category, "id">> = [
 
 /**
  * What "done" means for each kind of task. Claude must report every required
- * deliverable. Categories are shown here; they are created and changed in a
- * Claude session for that purpose.
+ * deliverable. Created and changed on a form, which can hand over to a Claude
+ * session instead.
  */
 export function CategoriesPage() {
   const live = useLive(() => api.categories(), []);
-  const { starting, start } = usePurpose();
+  const [form, setForm] = useState<{ category?: Category } | null>(null);
 
   return (
     <div className="h-full overflow-y-auto">
+      {form && <CategoryForm category={form.category} onClose={() => setForm(null)} onSaved={live.reload} />}
       <div className="space-y-4 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1 basis-48">
@@ -48,11 +50,11 @@ export function CategoriesPage() {
             <h1 className="text-base font-semibold">Task categories</h1>
             <p className="truncate text-xs text-muted-foreground" title="What counts as done for each kind of task.">What counts as done for each kind of task.</p>
           </div>
-          <Button variant="primary" className="shrink-0" disabled={starting} onClick={() => void start("create-category")} title="Opens a Claude session to define a category">
+          <Button variant="primary" className="shrink-0" onClick={() => setForm({})}>
             <Plus size={12} /> New category
           </Button>
         </div>
-        {live.data?.map((category) => <CategoryCard key={category.id} category={category} onEdit={() => void start("edit-category", category.id)} onDeleted={live.reload} />)}
+        {live.data?.map((category) => <CategoryCard key={category.id} category={category} onEdit={() => setForm({ category })} onDeleted={live.reload} />)}
         {live.data && !live.data.length && (
           <Empty
             title="No categories yet."
@@ -77,7 +79,7 @@ function CategoryCard({ category, onEdit, onDeleted }: { category: Category; onE
       description={category.description || undefined}
       action={
         <div className="flex gap-1">
-          <Button variant="ghost" size="icon" title="Edit with Claude" onClick={onEdit}>
+          <Button variant="ghost" size="icon" title="Edit" onClick={onEdit}>
             <Pencil size={13} />
           </Button>
           <Button

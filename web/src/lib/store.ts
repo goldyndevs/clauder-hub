@@ -31,6 +31,7 @@ export const PAGES = [
   "skills",
   "commands",
   "mcp-servers",
+  "variables",
   "hooks",
   "plugins",
   "channels",

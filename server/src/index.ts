@@ -11,6 +11,7 @@ import { checkClaudeCode, findClaudeCode } from "./claudeCode.js";
 import { withProject } from "./context.js";
 import { globalDb } from "./db.js";
 import { devRoutes } from "./devtools.js";
+import { variableRoutes } from "./variables.js";
 import { fileRoutes } from "./fileRoutes.js";
 import { closeOpen } from "./interactions.js";
 import { watchRunExits } from "./jobs.js";
@@ -162,6 +163,7 @@ scoped.use((req, res, next) => {
 });
 scoped.use("/files", fileRoutes);
 scoped.use(devRoutes);
+scoped.use(variableRoutes);
 scoped.use(api);
 app.use("/api/p/:projectId", scoped);
 app.use("/api", hubApi);

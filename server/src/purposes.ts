@@ -6,8 +6,8 @@ import { getJob } from "./jobs.js";
 import { getPreset } from "./toolset.js";
 
 /**
- * The hub has no forms: creating or changing a job, a run, a category, a
- * preset or a channel opens a Claude session for that one purpose. The same
+ * A job, a run, a category, a preset or a channel can be set up in a Claude
+ * session for that one purpose instead of its form (with the form's draft). The same
  * note (what it is for, every parameter, samples, the API to call) is shown
  * highlighted at the top of the session in the dashboard and appended to the
  * session's system prompt, so the person and Claude read the same thing.
@@ -73,6 +73,8 @@ function addMcpDefinition(entry: CatalogEntry | null): Definition {
 export interface Purpose {
   kind: PurposeKind;
   targetId?: string;
+  /** What the person had filled in on the form before handing it to Claude (secrets left out). */
+  draft?: Record<string, unknown>;
 }
 
 interface Param {
@@ -186,7 +188,7 @@ function definitionOf(purpose: Purpose): Definition {
     case "edit-job":
       return {
         title: purpose.kind === "create-job" ? "Create a job" : "Edit a job",
-        summary: "A job starts an unattended Claude session in this project on a cron schedule or when its webhook is called. Runs go through one queue, one at a time, with permission mode \"default\"; their questions reach the person's channels.",
+        summary: "A job starts an unattended Claude session in this project on a cron schedule or when its webhook is called. Runs go through one queue, as many at a time as the project allows (1 unless changed), with permission mode \"default\"; their questions reach the person's channels.",
         params: JOB_PARAMS,
         samples: [
           { name: "Triage Jira bugs", kind: "cron", schedule: "0 9 * * 1-5", prompt: "Look up the Jira bugs assigned to the team that were created since yesterday. For each one you can reproduce, fix it on its own branch and open a PR.", category: "bugfix", presetId: null, enabled: true },
@@ -331,6 +333,18 @@ export function purposeNote(purpose: Purpose, hub: string): string {
   const definition = definitionOf(purpose);
   const lines = [`# Purpose: ${definition.title}`, "", scopeApi(definition.summary), "", `The hub runs at ${hub}.`, ""];
   lines.push(...sectionLines(definition, currentValue(purpose), "##"));
+  if (purpose.draft) {
+    lines.push(
+      "## Started from the form",
+      "",
+      "The person began on the form and handed it over with these values. Start from them; ask only for what is missing, unclear or invalid. A secret field is never passed on: ask for it if it is needed.",
+      "",
+      "```json",
+      JSON.stringify(purpose.draft, null, 2),
+      "```",
+      "",
+    );
+  }
   // The general hub task carries every kind's own section, one level down.
   if (purpose.kind === "hub") {
     for (const section of HUB_SECTIONS) {

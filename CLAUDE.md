@@ -40,7 +40,9 @@ channels (Slack, Telegram, webhooks) that relay what sessions ask.
   and its prompt with `--append-system-prompt-file`, per process, from
   `server/src/sessions.ts`. The only exceptions are things the user asks for
   by name: running a suggested `claude mcp add` (always `--scope project`)
-  and saving an instruction file from Prompts & memory after a diff.
+  and saving an instruction file from Prompts & memory after a diff, and a
+  value rotated on the Variables page (`variables.ts`: that one key rewritten
+  in its file, after a confirm; values leave the hub only to this page).
 - **The terminal is not reimplemented.** The page shows the pty as it is. An
   answer from a channel or the dashboard is delivered by typing into the pty
   (`terminals.ts`: `pressKeys`, `typeMessage`), never by another API.
@@ -56,7 +58,9 @@ channels (Slack, Telegram, webhooks) that relay what sessions ask.
   dedupe usage by `message.id` (one line per content block repeats it) and a
   fork's inherited lines against its parent.
 - **One queue per project.** Every triggered run goes through `jobs.ts`
-  `enqueue` and runs alone in its project; projects run side by side. A run
+  `enqueue`; up to `maxRuns()` of a project's runs run side by side (settings
+  key `maxRuns`, 1 unless changed with the gear on the Automation tabs);
+  projects run side by side. A run
   ends when its session reports done (`hooks.ts` `onStop`) or its terminal
   exits.
 - **Every word the hub sends is in `prompts.ts`** and read through
@@ -106,15 +110,18 @@ channels (Slack, Telegram, webhooks) that relay what sessions ask.
   until one is pressed. Plain text on Slack is never guessed at: people talk
   there. The questions are `typed.pickMatches`, `typed.interpretCommand` and
   `typed.findFolders` in `prompts.ts`.
-- **No forms: configuration is a Claude session.** Creating or editing a
-  job, a run, a category, a preset or a channel opens a session with a
-  `purpose` (`server/src/purposes.ts`); the general `hub` purpose covers all of
-  them at once. Its note (purpose, every parameter
-  with an example, samples, the API) is shown highlighted at the top of the
-  session and appended to its system prompt; Claude asks, shows the final JSON,
-  saves through the hub API with curl after a yes, and the session stays open
-  for more edits. Adding a field to one of these objects means adding it to
-  its param list there. Toggling a preset's switches is the one direct editor kept.
+- **A form, or a Claude session.** Creating or editing a job, a run, a
+  category or a channel opens its form (`web/src/components/HubForms.tsx`;
+  a preset's is its editor on the Presets page). Bottom left, "Set up with
+  Claude" hands it over instead: a session with a `purpose`
+  (`server/src/purposes.ts`) whose `draft` is what the form held (secrets left
+  out), so Claude starts from it. The general `hub` purpose covers all of them
+  at once and the sidebar's Hub task menu opens these sessions directly. The
+  note (purpose, every parameter with an example, samples, the API) is shown
+  highlighted at the top of the session and appended to its system prompt;
+  Claude asks, shows the final JSON, saves through the hub API with curl after
+  a yes, and the session stays open for more edits. Adding a field to one of
+  these objects means adding it to its form and to its param list there.
 - **Server pushes topics, not state.** `events.ts` broadcasts "this changed";
   the page refetches through the same API (`useLive` in `web/src/lib/store.ts`).
 

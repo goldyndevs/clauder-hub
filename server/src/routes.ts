@@ -11,7 +11,7 @@ import { subscribe } from "./events.js";
 import { handleHook } from "./hooks.js";
 import { AnswerError, answerInteraction, chooseInteraction, dismissInteraction, listInteractions, withPresentation } from "./interactions.js";
 import { isDefinitionFile, isMemoryFile, memoryFiles, readInventory } from "./inventory.js";
-import { cancelRun, deleteJob, enqueue, getJob, listJobs, listRuns, resumeRun, rotateToken, saveJob, stopRun } from "./jobs.js";
+import { cancelRun, deleteJob, enqueue, getJob, listJobs, listRuns, MAX_RUNS_LIMIT, maxRuns, resumeRun, rotateToken, saveJob, setMaxRuns, stopRun } from "./jobs.js";
 import { catalogEntry, MCP_CATALOG } from "./mcpCatalog.js";
 import { deleteSuggestion, installServer, installSuggestion, listSuggestions, skipSuggestion } from "./mcpSuggestions.js";
 import { currentProject, withProject } from "./context.js";
@@ -307,14 +307,20 @@ api.post(
 api.post(
   "/purpose-sessions",
   wrap((req) => {
-    const { kind, targetId, cols, rows } = req.body ?? {};
-    const purpose = { kind, ...(targetId ? { targetId: String(targetId) } : {}) };
+    const { kind, targetId, draft, cols, rows } = req.body ?? {};
+    const purpose = {
+      kind,
+      ...(targetId ? { targetId: String(targetId) } : {}),
+      ...(draft && typeof draft === "object" && !Array.isArray(draft) ? { draft: draft as Record<string, unknown> } : {}),
+    };
     if (!isPurpose(purpose)) throw new Error("Unknown purpose.");
     if (kind.startsWith("edit-") && !purpose.targetId) throw new Error("Editing needs the id of what is edited.");
     // No first message, so the person says what they want; the purpose is in its system prompt. Adding an
     // MCP server is the exception: the click already said what, so Claude starts on it and asks for what it needs.
     const entry = kind === "add-mcp" ? catalogEntry(purpose.targetId) : null;
-    const prompt = kind !== "add-mcp" ? undefined : entry ? renderPrompt("typed.addMcp", { server: entry.name }) : renderPrompt("typed.addAnyMcp", {});
+    // From a form, Claude picks up where the form left off.
+    const prompt =
+      kind === "add-mcp" ? (entry ? renderPrompt("typed.addMcp", { server: entry.name }) : renderPrompt("typed.addAnyMcp", {})) : purpose.draft ? renderPrompt("typed.fromForm", {}) : undefined;
     const terminal = startSession({ purpose, prompt, name: `Hub: ${purposeTitle(purpose)}`, origin: "manual", cols, rows });
     return { sessionId: terminal.sessionId, terminalId: terminal.id };
   }),
@@ -550,6 +556,9 @@ api.post(
 );
 
 api.get("/runs", wrap(() => listRuns()));
+// How many of the project's runs may run side by side.
+api.get("/queue-settings", wrap(() => ({ maxRuns: maxRuns(), limit: MAX_RUNS_LIMIT })));
+api.put("/queue-settings", wrap((req) => ({ maxRuns: setMaxRuns(req.body?.maxRuns), limit: MAX_RUNS_LIMIT })));
 api.post("/runs/:id/stop", wrap((req) => stopRun(req.params.id)));
 api.post("/runs/:id/resume", wrap((req) => resumeRun(req.params.id)));
 api.post("/runs", wrap((req) => enqueue({ source: "manual", prompt: String(req.body?.prompt ?? ""), category: req.body?.category || "auto" })));

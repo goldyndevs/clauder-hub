@@ -5,9 +5,9 @@ import { projectApi } from "../lib/project";
 import { cn } from "../lib/cn";
 import { attempt, useLive, useStore } from "../lib/store";
 import type { Channel } from "../lib/types";
-import { usePurpose } from "../lib/usePurpose";
 import { Section } from "./Charts";
 import { useConfirm } from "./Confirm";
+import { ChannelForm } from "./HubForms";
 import { Button } from "./ui/Button";
 import { CopyButton } from "./ui/CopyId";
 import { Empty } from "./ui/Empty";
@@ -54,7 +54,7 @@ function Switch({ on, label, onToggle, className }: { on: boolean; label: string
  */
 export function ChannelsPage({ global = false }: { global?: boolean }) {
   const live = useLive(() => api.channels(), ["channels"]);
-  const { starting, start } = usePurpose();
+  const [form, setForm] = useState<{ channel?: Channel } | null>(null);
   const confirm = useConfirm();
   const kinds = live.data?.kinds ?? [];
   const paused = live.data?.paused ?? false;
@@ -83,6 +83,8 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
   return (
     // On #/global it is one section of a page that scrolls on its own.
     <div className={global ? "" : "h-full overflow-y-auto"}>
+      {/* This computer is made by the hub itself, never added. */}
+      {form && <ChannelForm channel={form.channel} kinds={form.channel ? kinds : kinds.filter((kind) => kind.kind !== "device")} onClose={() => setForm(null)} />}
       <div className={cn("space-y-4", !global && "p-5")}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1 basis-48">
@@ -96,7 +98,7 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
               <p className="truncate text-xs text-muted-foreground" title="Where sessions reach you. A reply goes back into the session.">Where sessions reach you. A reply goes back into the session.</p>
             )}
           </div>
-          <Button variant="primary" className="shrink-0" disabled={starting} onClick={() => void start("create-channel")} title="Opens a Claude session to connect a channel">
+          <Button variant="primary" className="shrink-0" onClick={() => setForm({})}>
             <Plus size={12} /> Add channel
           </Button>
         </div>
@@ -160,7 +162,7 @@ export function ChannelsPage({ global = false }: { global?: boolean }) {
                   <Button variant="ghost" size="icon" title="Send a test message" onClick={() => void attempt(() => api.testChannel(channel.id), "Test message sent.")}>
                     <Send size={13} />
                   </Button>
-                  <Button variant="ghost" size="icon" title="Edit with Claude" onClick={() => void start("edit-channel", channel.id)}>
+                  <Button variant="ghost" size="icon" title="Edit" onClick={() => setForm({ channel })}>
                     <Pencil size={13} />
                   </Button>
                   <Button
