@@ -6,6 +6,7 @@ import { ChannelsPage } from "./components/ChannelsPage";
 import { ClaudeSettingsPage } from "./components/ClaudeSettingsPage";
 import { ConfirmProvider } from "./components/Confirm";
 import { FileView } from "./components/FileView";
+import { ForeignSessionView } from "./components/ForeignSessionView";
 import { HubPromptsPage } from "./components/HubPromptsPage";
 import { GlobalShell, HubSettingsPage } from "./components/GlobalPage";
 import { GLOBAL_ID } from "./lib/project";
@@ -178,7 +179,15 @@ export default function App() {
   }
 
   const content =
-    view.kind === "session" ? <SessionView key={view.id} id={view.id} /> : view.kind === "file" ? <FileView key={view.path} path={view.path} /> : PAGE_VIEW[view.page]();
+    view.kind === "session" ? (
+      <SessionView key={view.id} id={view.id} />
+    ) : view.kind === "foreign" ? (
+      <ForeignSessionView key={`${view.projectId}/${view.id}`} projectId={view.projectId} id={view.id} />
+    ) : view.kind === "file" ? (
+      <FileView key={view.path} path={view.path} />
+    ) : (
+      PAGE_VIEW[view.page]()
+    );
 
   return (
     <ConfirmProvider>

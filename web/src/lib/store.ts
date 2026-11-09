@@ -43,7 +43,8 @@ export const PAGES = [
   "hub-settings",
 ] as const;
 export type Page = (typeof PAGES)[number];
-export type View = { kind: "page"; page: Page } | { kind: "session"; id: string } | { kind: "file"; path: string };
+/** "foreign": another project's session shown here, the sidebar staying on this project. */
+export type View = { kind: "page"; page: Page } | { kind: "session"; id: string } | { kind: "file"; path: string } | { kind: "foreign"; projectId: string; id: string };
 
 interface State {
   /** The project shown, from the route; null on the home page. */
@@ -66,8 +67,10 @@ interface State {
   go: (view: View) => void;
   /** Shows a project, or the home page with null. */
   openProject: (id: string | null) => void;
-  /** Shows a session of any project, switching to it first when it is another. */
+  /** Shows a session of any project; another project's is shown here, without switching to it. */
   openSessionIn: (projectId: string, sessionId: string) => void;
+  /** Switches to a session's project and shows it there. */
+  switchToSession: (projectId: string, sessionId: string) => void;
   refreshSessions: () => Promise<void>;
   refreshOpen: () => Promise<void>;
   notify: (text: string, tone?: "error" | "info") => void;
@@ -95,6 +98,10 @@ function readHash(): { projectId: string | null; view: View; windowed: boolean }
   const projectId = decodePart(slash === -1 ? hash : hash.slice(0, slash)) || GLOBAL_ID;
   hash = slash === -1 ? "" : hash.slice(slash + 1);
   if (hash.startsWith("session/")) return { projectId, view: { kind: "session", id: hash.slice("session/".length) }, windowed };
+  if (hash.startsWith("x/")) {
+    const [other, id] = hash.slice(2).split("/");
+    if (other && id) return { projectId, view: { kind: "foreign", projectId: decodePart(other), id }, windowed };
+  }
   if (hash.startsWith("file/")) return { projectId, view: { kind: "file", path: hash.slice("file/".length).split("/").map(decodePart).join("/") }, windowed };
   return { projectId, view: { kind: "page", page: PAGES.find((page) => page === hash) ?? "overview" }, windowed };
 }
@@ -102,14 +109,20 @@ function readHash(): { projectId: string | null; view: View; windowed: boolean }
 function hashOf(projectId: string | null, view: View, windowed: boolean): string {
   if (!projectId) return hashOf(GLOBAL_ID, view, windowed);
   const path =
-    view.kind === "session" ? `session/${view.id}` : view.kind === "file" ? `file/${view.path.split("/").map(encodeURIComponent).join("/")}` : view.page;
+    view.kind === "session"
+      ? `session/${view.id}`
+      : view.kind === "foreign"
+        ? `x/${encodeURIComponent(view.projectId)}/${view.id}`
+        : view.kind === "file"
+          ? `file/${view.path.split("/").map(encodeURIComponent).join("/")}`
+          : view.page;
   return `#/${windowed ? "w/" : ""}${encodeURIComponent(projectId)}/${path}`;
 }
 
 /** Opens a view of the current project in a browser window of its own, so several terminals can sit side by side. */
 export function openWindow(view: View): void {
   const projectId = useStore.getState().projectId;
-  const name = view.kind === "session" ? `clauder-${projectId}-${view.id}` : view.kind === "file" ? `clauder-file-${projectId}-${view.path}` : `clauder-${projectId}-${view.page}`;
+  const name = view.kind === "session" || view.kind === "foreign" ? `clauder-${view.kind === "foreign" ? view.projectId : projectId}-${view.id}` : view.kind === "file" ? `clauder-file-${projectId}-${view.path}` : `clauder-${projectId}-${view.page}`;
   window.open(`${location.origin}${location.pathname}${hashOf(projectId, view, true)}`, name, "popup,width=1280,height=820");
 }
 
@@ -300,6 +313,11 @@ export const useStore = create<State>((set, get) => {
     },
 
     openSessionIn: (projectId, sessionId) => {
+      if (projectId === get().projectId) return get().go({ kind: "session", id: sessionId });
+      get().go({ kind: "foreign", projectId, id: sessionId });
+    },
+
+    switchToSession: (projectId, sessionId) => {
       if (projectId === get().projectId) return get().go({ kind: "session", id: sessionId });
       window.location.hash = hashOf(projectId, { kind: "session", id: sessionId }, false).slice(1);
     },

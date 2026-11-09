@@ -25,6 +25,7 @@ import { Empty } from "./ui/Empty";
 import { ClaudeBanner } from "./ClaudeBanner";
 import { Tooltip } from "./ui/Tooltip";
 import { LivePanel, useLivePanel } from "./LivePanel";
+import { ForeignSessionView } from "./ForeignSessionView";
 
 /** #/global's pages: they reuse the project page names, so the route reads #/global/inbox. */
 const GLOBAL_NAV: Array<{ page: Page; label: string; icon: typeof Inbox }> = [
@@ -759,6 +760,8 @@ export function GlobalShell() {
   const content =
     view.kind === "session" ? (
       <SessionView key={view.id} id={view.id} />
+    ) : view.kind === "foreign" ? (
+      <ForeignSessionView key={`${view.projectId}/${view.id}`} projectId={view.projectId} id={view.id} />
     ) : view.kind === "page" && view.page === "inbox" ? (
       <GlobalInbox />
     ) : view.kind === "page" && view.page === "hub-settings" ? (

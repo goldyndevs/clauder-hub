@@ -71,10 +71,12 @@ export function ShortcutKeys() {
   const [finder, setFinder] = useState(false);
 
   useEffect(() => {
-    if (!projectId || view.kind !== "session") return;
+    if (!projectId || (view.kind !== "session" && view.kind !== "foreign")) return;
+    // Another project's session shown here counts as that project's.
+    const owner = view.kind === "foreign" ? view.projectId : projectId;
     const last = visited[visited.length - 1];
-    if (last && last.projectId === projectId && last.id === view.id) return;
-    visited.push({ projectId, id: view.id });
+    if (last && last.projectId === owner && last.id === view.id) return;
+    visited.push({ projectId: owner, id: view.id });
     if (visited.length > 50) visited.shift();
   }, [projectId, view]);
 
@@ -106,7 +108,7 @@ export function ShortcutKeys() {
         // The latest one that is not the session shown now.
         for (let index = visited.length - 1; index >= 0; index -= 1) {
           const item = visited[index];
-          if (item.projectId === here && shown.kind === "session" && item.id === shown.id) continue;
+          if ((item.projectId === here && shown.kind === "session" && item.id === shown.id) || (shown.kind === "foreign" && shown.projectId === item.projectId && shown.id === item.id)) continue;
           return openSession(item.projectId, item.id);
         }
         return;
@@ -116,7 +118,11 @@ export function ShortcutKeys() {
         const waiting = openSessions(projects).filter((item) => isWaiting(item.session));
         if (!waiting.length) return useStore.getState().notify("No session is waiting on you.");
         // The one after the session shown, round the list.
-        const at = waiting.findIndex((item) => item.project.id === here && shown.kind === "session" && item.session.id === shown.id);
+        const at = waiting.findIndex(
+          (item) =>
+            (item.project.id === here && shown.kind === "session" && item.session.id === shown.id) ||
+            (shown.kind === "foreign" && shown.projectId === item.project.id && shown.id === item.session.id),
+        );
         const next = waiting[(at + 1) % waiting.length];
         openSession(next.project.id, next.session.id);
       }

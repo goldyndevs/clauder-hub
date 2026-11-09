@@ -222,7 +222,7 @@ function ProjectGroup({ project }: { project: LiveProject }) {
         </Button>
       </div>
       {project.open.map((session) => {
-        const current = here && view.kind === "session" && view.id === session.id;
+        const current = (here && view.kind === "session" && view.id === session.id) || (view.kind === "foreign" && view.projectId === project.id && view.id === session.id);
         const open = () => openSessionIn(project.id, session.id);
         return (
           // A row with its own close button inside, so not a <button> itself.
@@ -276,6 +276,7 @@ function ProjectGroup({ project }: { project: LiveProject }) {
           onClose={() => setMenu(null)}
           items={[
             ["Open", ArrowRight, () => openSessionIn(project.id, menu.session.id)],
+            ["Open in its project", ArrowRight, () => useStore.getState().switchToSession(project.id, menu.session.id), false, useStore.getState().projectId === project.id],
             ["Rename", Pencil, () => void actions.rename(menu.session, project.id)],
             ["Close", X, () => void close([menu.session], "it"), true],
             ["Close Stopped", ListX, () => void close(project.open.filter((session) => !session.live), "the stopped ones"), false, !project.open.some((session) => !session.live)],

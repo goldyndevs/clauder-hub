@@ -128,6 +128,9 @@ export const api = {
   /** Opens a Claude session for one configuration task; a form hands over what it had as the draft. */
   startPurpose: (kind: PurposeKind, targetId?: string, size: TerminalSize = {}, draft?: Record<string, unknown>) =>
     post<{ sessionId: string; terminalId: string }>("/purpose-sessions", { kind, targetId, draft, ...size }),
+  /** Another project's session resumed without switching to it. */
+  resumeSessionIn: (projectId: string, id: string, size: TerminalSize = {}) =>
+    call<{ sessionId: string; terminalId: string }>(`/api/p/${encodeURIComponent(projectId)}/sessions/${id}/resume`, { method: "POST", body: JSON.stringify(size) }),
   resumeSession: (id: string, size: TerminalSize = {}) => post<{ sessionId: string; terminalId: string }>(`/sessions/${id}/resume`, size),
   /** With a project id, a session of that project rather than the open one (the live panel). */
   killSession: (id: string, projectId?: string) =>

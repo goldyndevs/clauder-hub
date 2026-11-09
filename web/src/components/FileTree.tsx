@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, ChevronRight, ClipboardPaste, Copy, Eye, EyeOff, ExternalLink, File, FilePlus, Folder, FolderOpen, FolderPlus, Link, MoreHorizontal, Pencil, RefreshCw, Scissors, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, ClipboardPaste, Copy, ExternalLink, File, FilePlus, Folder, FolderOpen, FolderPlus, Link, MoreHorizontal, Pencil, RefreshCw, Scissors, Trash2 } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { useFileClipboard } from "../lib/fileClipboard";
@@ -13,15 +13,14 @@ import { Tooltip } from "./ui/Tooltip";
 
 /**
  * The Files tab: the project's folders, read one folder at a time as they
- * open. What .gitignore ignores (and .git itself) is hidden unless "Show
- * ignored" is on. Creating, renaming, moving and deleting happen at once,
+ * open. What .gitignore ignores is shown dimmed; .git itself is never
+ * listed. Creating, renaming, moving and deleting happen at once,
  * without a confirmation: the user asked for that here. Delete sits in the
  * row's menu (right click, long press or "...") so it is never one stray click.
  */
 
 /** Per project: the folders open in its tree. */
 const expandedKey = () => `clauder-hub:files-expanded:${useStore.getState().projectId}`;
-const IGNORED_KEY = "clauder-hub:files-show-ignored";
 const CHANGED_KEY = "clauder-hub:files-changed-only";
 
 type Editing = { kind: "file" | "folder"; parent: string } | { kind: "rename"; entry: FileEntry } | null;
@@ -87,7 +86,8 @@ async function pasteInto(folder: string, go: ReturnType<typeof useStore.getState
 }
 
 export function FileTree() {
-  const [showIgnored, setShowIgnored] = useState(() => readStored(IGNORED_KEY, false));
+  // What .gitignore ignores is always listed, dimmed, as VS Code shows it; only .git stays out (the server's doing).
+  const showIgnored = true;
   const [changedOnly, setChangedOnly] = useState(() => readStored(CHANGED_KEY, false));
   const [epoch, setEpoch] = useState(0);
   const changes = useGitChanges(epoch);
@@ -153,21 +153,6 @@ export function FileTree() {
           <Tooltip content="New folder" asChild>
             <Button variant="ghost" size="icon" aria-label="New folder" onClick={() => setEditing({ kind: "folder", parent: "" })}>
               <FolderPlus size={13} />
-            </Button>
-          </Tooltip>
-          <Tooltip content={showIgnored ? "Hide ignored" : "Show ignored"} asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Show ignored"
-              aria-pressed={showIgnored}
-              className={cn(showIgnored && "bg-muted text-foreground")}
-              onClick={() => {
-                setShowIgnored(!showIgnored);
-                store(IGNORED_KEY, !showIgnored);
-              }}
-            >
-              {showIgnored ? <Eye size={13} /> : <EyeOff size={13} />}
             </Button>
           </Tooltip>
           {clipboard && (

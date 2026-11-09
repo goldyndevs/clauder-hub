@@ -374,7 +374,7 @@ const quoted = (path: string) => (/\s/.test(path) ? `"${path}"` : path);
  * process as they are, and its output is drawn as it comes. Leaving the view
  * only takes it off the page (see Kept); the process keeps running on the hub.
  */
-export function TerminalView({ terminalId, onExit }: { terminalId: string; onExit?: () => void }) {
+export function TerminalView({ terminalId, onExit, projectId }: { terminalId: string; onExit?: () => void; projectId?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const entryRef = useRef<Kept | null>(null);
   const [state, setViewState] = useState<TerminalState>("connecting");
@@ -432,7 +432,7 @@ export function TerminalView({ terminalId, onExit }: { terminalId: string; onExi
     try {
       const paths: string[] = [];
       for (const file of files) {
-        const response = await fetch(`${projectApi()}/drop`, {
+        const response = await fetch(`${projectId ? `/api/p/${encodeURIComponent(projectId)}` : projectApi()}/drop`, {
           method: "POST",
           headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) },
           body: file,

@@ -158,6 +158,8 @@ export function listFolder(relInput: unknown, showIgnored: boolean): { path: str
   }
   const entries: FileEntry[] = [];
   for (const dirent of dirents) {
+    // Git's own folder is never shown, as VS Code hides it; what .gitignore ignores is, dimmed.
+    if (dirent.name === ".git") continue;
     const full = path.join(absolute, dirent.name);
     let stat: fs.Stats;
     try {
