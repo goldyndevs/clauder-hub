@@ -231,7 +231,7 @@ const HUB_TASKS: Array<{ kind: PurposeKind; label: string; icon: typeof Bell }> 
  * arrow at its end offers the same or a hub task (a Claude session for one
  * configuration job).
  */
-function NewSessionButton({ beside, size = "sm", full = false, quiet = false }: { beside: number; size?: "sm" | "md"; full?: boolean; quiet?: boolean }) {
+function NewSessionButton({ beside, size = "sm", full = false }: { beside: number; size?: "sm" | "md"; full?: boolean }) {
   const { starting, newSession } = useNewSession(beside);
   const { starting: startingTask, start } = usePurpose();
   const [open, setOpen] = useState(false);
@@ -240,12 +240,9 @@ function NewSessionButton({ beside, size = "sm", full = false, quiet = false }: 
     setOpen(false);
     void run();
   };
-  // Quiet: inside a sidebar tab, a low muted bar rather than the page's primary action.
-  const variant = quiet ? "muted" : "primary";
-  const low = quiet ? "py-1" : "";
   return (
     <div className={cn("flex", full && "w-full")}>
-      <Button variant={variant} size={size} className={cn("flex-1 rounded-r-none", low)} disabled={busy} onClick={() => void newSession()} aria-label="New session">
+      <Button variant="primary" size={size} className="flex-1 rounded-r-none" disabled={busy} onClick={() => void newSession()} aria-label="New session">
         <Plus size={size === "md" ? 14 : 13} /> {busy ? "Starting..." : "New session"}
       </Button>
       <Popover
@@ -255,9 +252,9 @@ function NewSessionButton({ beside, size = "sm", full = false, quiet = false }: 
         className="w-56 p-1"
         trigger={
           <Button
-            variant={variant}
+            variant="primary"
             size={size}
-            className={cn("rounded-l-none border-l px-2", quiet ? "border-foreground/10" : "border-primary-foreground/25", low)}
+            className="rounded-l-none border-l border-primary-foreground/25 px-2"
             disabled={busy}
             aria-label="More ways to start"
             title="Plain session or hub task"
@@ -423,7 +420,7 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
         ) : tab === "workspace" ? (
           <nav className="px-2">
             <div className="px-1 pb-1">
-              <NewSessionButton beside={sideWidth} full quiet />
+              <NewSessionButton beside={sideWidth} full />
             </div>
             {NAV_GROUPS.map((group) => {
               const isFolded = folded.has(group.id);
@@ -470,7 +467,7 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
                 <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sessions" className="pl-6" />
               </div>
               <div className="mt-1.5">
-                <NewSessionButton beside={sideWidth} full quiet />
+                <NewSessionButton beside={sideWidth} full />
               </div>
             </div>
             <div className="px-2">
