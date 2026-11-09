@@ -70,7 +70,7 @@ const INHERITED_MARKERS = [
   "AI_AGENT",
 ];
 
-function childEnv(): Record<string, string> {
+export function childEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && !INHERITED_MARKERS.includes(key)) env[key] = value;

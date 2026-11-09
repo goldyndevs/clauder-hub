@@ -1,5 +1,6 @@
 import express from "express";
 import { blameFile, commitDetails } from "./blame.js";
+import { gitChanges, originalText } from "./gitChanges.js";
 import { FileError, copyFileToClipboard, copyPath, revealPath, createFile, createFolder, deletePath, listFolder, readText, renamePath, resolvePath, statFile, writeText } from "./files.js";
 
 /** The Files tab: /api/files. Every path is relative to the project root; files.ts checks it. */
@@ -54,6 +55,8 @@ const wrapAsync =
 
 fileRoutes.get("/blame", wrapAsync((req) => blameFile(req.query.path)));
 fileRoutes.get("/commit", wrapAsync((req) => commitDetails(req.query.sha)));
+fileRoutes.get("/git-changes", wrapAsync(() => gitChanges()));
+fileRoutes.get("/original", wrapAsync((req) => originalText(req.query.path, req.query.from)));
 fileRoutes.put("/write", wrap((req) => writeText(req.body?.path, req.body?.content, req.body?.expectedMtimeMs)));
 fileRoutes.post("/create", wrap((req) => createFile(req.body?.path, req.body?.content ?? "")));
 fileRoutes.post("/mkdir", wrap((req) => createFolder(req.body?.path)));

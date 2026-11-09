@@ -51,6 +51,10 @@ export const filesApi = {
   read: (path: string) => request<FileRead>(`/read?path=${encodeURIComponent(path)}`),
   /** Who last changed each line; available is false outside git or for an untracked file. */
   blame: (path: string) => request<Blame>(`/blame?path=${encodeURIComponent(path)}`),
+  /** The files git sees changed against HEAD; available is false outside a git checkout. */
+  changes: () => request<{ available: boolean; files: Array<{ path: string; status: "M" | "A" | "D" | "R" | "U" | "C"; from?: string | null }> }>("/git-changes"),
+  /** A file as HEAD has it (a rename under its old path); exists is false for a file HEAD does not have. */
+  original: (path: string, from?: string) => request<{ exists: boolean; content: string }>(`/original?path=${encodeURIComponent(path)}${from ? `&from=${encodeURIComponent(from)}` : ""}`),
   commit: (sha: string) => request<{ sha: string; message: string; author: string; email: string; date: string }>(`/commit?sha=${encodeURIComponent(sha)}`),
   /** When the file last changed, without its content; for noticing edits made elsewhere. */
   stat: (path: string) => request<{ path: string; exists: boolean; mtimeMs: number; size: number }>(`/stat?path=${encodeURIComponent(path)}`),

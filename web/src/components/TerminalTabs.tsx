@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { useStore } from "../lib/store";
 import type { Session } from "../lib/types";
-import { useConfirm } from "./Confirm";
+import { useStopConfirm } from "../lib/hubSettings";
 import { focusNeighbourTerminal, useSessionActions } from "./SessionActions";
 import { StatusDot } from "./Sidebar";
 
@@ -61,7 +61,7 @@ export function TerminalTabs() {
   const sessions = useStore((state) => state.sessions);
   const view = useStore((state) => state.view);
   const go = useStore((state) => state.go);
-  const confirm = useConfirm();
+  const confirmStop = useStopConfirm();
   const strip = useRef<HTMLDivElement>(null);
   const actions = useSessionActions();
   const [menu, setMenu] = useState<{ session: Session; x: number; y: number } | null>(null);
@@ -78,7 +78,7 @@ export function TerminalTabs() {
   const stop = (session: Session) => actions.stop(session);
 
   const stopMany = (targets: Session[], all: boolean) =>
-    confirm({
+    confirmStop({
       title: `Stop ${all ? "all " : ""}${targets.length} ${all ? "running" : "other"} terminal${targets.length > 1 ? "s" : ""}?`,
       description: "Their conversations are kept for a later resume.",
       body: <div className="space-y-0.5 text-[11px] text-muted-foreground">{targets.map((session) => <div key={session.id} className="truncate">{session.title}</div>)}</div>,

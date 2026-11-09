@@ -5,6 +5,7 @@ import { useFileClipboard } from "../lib/fileClipboard";
 import { isDirty, useDrafts } from "../lib/fileDrafts";
 import { tabsUnder, useOpenFiles } from "../lib/openFiles";
 import { filesApi, type FileEntry } from "../lib/filesApi";
+import { STATUS_LABEL, STATUS_TONE, useDiffMode, useGitChanges, type GitChange } from "../lib/gitChanges";
 import { attempt, openWindow, useLive, useStore } from "../lib/store";
 import { FileIcon } from "./FileIcon";
 import { Button } from "./ui/Button";
@@ -21,6 +22,7 @@ import { Tooltip } from "./ui/Tooltip";
 /** Per project: the folders open in its tree. */
 const expandedKey = () => `clauder-hub:files-expanded:${useStore.getState().projectId}`;
 const IGNORED_KEY = "clauder-hub:files-show-ignored";
+const CHANGED_KEY = "clauder-hub:files-changed-only";
 
 type Editing = { kind: "file" | "folder"; parent: string } | { kind: "rename"; entry: FileEntry } | null;
 
@@ -86,8 +88,11 @@ async function pasteInto(folder: string, go: ReturnType<typeof useStore.getState
 
 export function FileTree() {
   const [showIgnored, setShowIgnored] = useState(() => readStored(IGNORED_KEY, false));
-  const [expanded, setExpanded] = useState(() => new Set(readStored<string[]>(expandedKey(), [])));
+  const [changedOnly, setChangedOnly] = useState(() => readStored(CHANGED_KEY, false));
   const [epoch, setEpoch] = useState(0);
+  const changes = useGitChanges(epoch);
+  const changedCount = changes.data?.files.length ?? 0;
+  const [expanded, setExpanded] = useState(() => new Set(readStored<string[]>(expandedKey(), [])));
   const [editing, setEditing] = useState<Editing>(null);
   const [menu, setMenu] = useState<{ entry: FileEntry; x: number; y: number } | null>(null);
   const clipboard = useFileClipboard((state) => state.item);
@@ -122,7 +127,24 @@ export function FileTree() {
       <div className="flex min-h-full flex-col" onContextMenu={onRootMenu}>
         {/* The toolbar stays put while the tree scrolls under it. */}
         <div className="sticky top-0 z-10 flex items-center gap-0.5 bg-background px-3 pb-1">
-          <div className="flex-1 text-[10px] text-muted-foreground">Project files</div>
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-[10px] text-muted-foreground">
+            <span className="truncate">Project files</span>
+            {changes.data?.available && (
+              <label className="flex shrink-0 cursor-pointer select-none items-center gap-1" title="Only the files git sees changed against HEAD; opening one shows its diff">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-[hsl(var(--primary))]"
+                  checked={changedOnly}
+                  onChange={(event) => {
+                    setChangedOnly(event.target.checked);
+                    store(CHANGED_KEY, event.target.checked);
+                  }}
+                />
+                Changed
+                {changedCount > 0 && <span className="rounded-full bg-severity-warning/20 px-1 font-semibold tabular-nums text-severity-warning">{changedCount}</span>}
+              </label>
+            )}
+          </div>
           <Tooltip content="New file" asChild>
             <Button variant="ghost" size="icon" aria-label="New file" onClick={() => setEditing({ kind: "file", parent: "" })}>
               <FilePlus size={13} />
@@ -162,12 +184,114 @@ export function FileTree() {
           </Tooltip>
         </div>
         {/* Grows to the bottom, so the empty space under the tree takes the root menu too. */}
-        <div className="flex-1 px-2">
-          <FolderChildren path="" depth={0} />
-        </div>
+        <div className="flex-1 px-2">{changedOnly && changes.data?.available ? <ChangedTree files={changes.data.files} /> : <FolderChildren path="" depth={0} />}</div>
       </div>
       {menu && <FileMenu {...menu} onClose={() => setMenu(null)} />}
     </Tree.Provider>
+  );
+}
+
+interface ChangeNode {
+  name: string;
+  path: string;
+  dirs: Map<string, ChangeNode>;
+  files: GitChange[];
+}
+
+/** The changed files as a tree of their folders, every folder open unless folded, as VS Code's Source Control tree. */
+function ChangedTree({ files }: { files: GitChange[] }) {
+  const [folded, setFolded] = useState<Set<string>>(() => new Set());
+  if (!files.length) return <div className="px-2 py-1 text-[11px] text-muted-foreground">No changes against HEAD.</div>;
+  const root: ChangeNode = { name: "", path: "", dirs: new Map(), files: [] };
+  for (const file of files) {
+    const parts = file.path.split("/");
+    let node = root;
+    for (const part of parts.slice(0, -1)) {
+      const next = join(node.path, part);
+      if (!node.dirs.has(part)) node.dirs.set(part, { name: part, path: next, dirs: new Map(), files: [] });
+      node = node.dirs.get(part)!;
+    }
+    node.files.push(file);
+  }
+  const fold = (path: string) =>
+    setFolded((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  return <ChangeChildren node={root} depth={0} folded={folded} fold={fold} />;
+}
+
+function ChangeChildren({ node, depth, folded, fold }: { node: ChangeNode; depth: number; folded: Set<string>; fold: (path: string) => void }) {
+  const dirs = [...node.dirs.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const files = [...node.files].sort((a, b) => a.path.localeCompare(b.path));
+  return (
+    <>
+      {dirs.map((dir) => {
+        // A folder holding just one folder reads as one row, "src/components", as VS Code compacts it.
+        let shown = dir;
+        let label = dir.name;
+        while (shown.files.length === 0 && shown.dirs.size === 1) {
+          shown = [...shown.dirs.values()][0];
+          label = `${label}/${shown.name}`;
+        }
+        const open = !folded.has(shown.path);
+        return (
+          <div key={shown.path}>
+            <button
+              onClick={() => fold(shown.path)}
+              title={shown.path}
+              className="flex w-full select-none items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              style={{ paddingLeft: `${depth * 12 + 4}px` }}
+            >
+              {open ? <ChevronDown size={11} className="shrink-0" /> : <ChevronRight size={11} className="shrink-0" />}
+              <FileIcon name={shown.name} folder open={open} />
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+            </button>
+            {open && <ChangeChildren node={shown} depth={depth + 1} folded={folded} fold={fold} />}
+          </div>
+        );
+      })}
+      {files.map((file) => (
+        <ChangedFileRow key={file.path} file={file} depth={depth} />
+      ))}
+    </>
+  );
+}
+
+function ChangedFileRow({ file, depth }: { file: GitChange; depth: number }) {
+  const { openMenu } = useTree();
+  const go = useStore((state) => state.go);
+  const active = useStore((state) => state.view.kind === "file" && state.view.path === file.path);
+  const dirty = useDrafts((state) => isDirty(state.drafts[file.path]));
+  const name = file.path.split("/").pop() ?? file.path;
+  const deleted = file.status === "D";
+  return (
+    <button
+      onClick={() => {
+        useDiffMode.getState().set(file.path, true);
+        go({ kind: "file", path: file.path });
+      }}
+      onDoubleClick={() => useOpenFiles.getState().pin(file.path)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        // A deleted file has nothing on disk to rename, copy or reveal.
+        if (!deleted) openMenu({ name, path: file.path, kind: "file", size: 0, ignored: false }, event.clientX, event.clientY);
+      }}
+      title={`${file.path}\n${STATUS_LABEL[file.status]}${file.from ? ` from ${file.from}` : ""}`}
+      className={cn(
+        "flex w-full select-none items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs transition-colors",
+        active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      )}
+      style={{ paddingLeft: `${depth * 12 + 4}px` }}
+    >
+      <span className="w-[11px] shrink-0" />
+      <FileIcon name={name} />
+      <span className={cn("min-w-0 flex-1 truncate", deleted && "line-through opacity-70")}>{name}</span>
+      {dirty && <span title="Unsaved changes" className="h-1.5 w-1.5 shrink-0 rounded-full bg-severity-warning" />}
+      <span className={cn("w-3 shrink-0 text-center font-mono text-[10px] font-semibold", STATUS_TONE[file.status])}>{file.status}</span>
+    </button>
   );
 }
 

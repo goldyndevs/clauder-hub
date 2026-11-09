@@ -1,4 +1,4 @@
-import { ArrowRight, Bell, BellOff, CalendarClock, Check, LogIn, Pencil, RefreshCw, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, CalendarClock, Check, Settings, LogIn, Pencil, RefreshCw, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -6,6 +6,8 @@ import { compact, when } from "../lib/format";
 import { attempt, useLive, useStore, type Page } from "../lib/store";
 import type { AuthInfo, GlobalProject, Profile } from "../lib/types";
 import { useProfileList, useProfiles } from "../lib/profiles";
+import { shortLabel, useUsage, type UsageReading } from "../lib/usage";
+import { useHubSettings, useHubSettingsData, type HubSettings } from "../lib/hubSettings";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { usePersistentWidth } from "../lib/usePersistentWidth";
 import { ChannelsPage } from "./ChannelsPage";
@@ -29,6 +31,7 @@ const GLOBAL_NAV: Array<{ page: Page; label: string; icon: typeof Inbox }> = [
   { page: "overview", label: "Projects", icon: LayoutGrid },
   { page: "inbox", label: "Inbox", icon: Inbox },
   { page: "channels", label: "Channels", icon: Radio },
+  { page: "hub-settings", label: "Settings", icon: Settings },
 ];
 
 let homeFolder: Promise<string | null> | null = null;
@@ -216,17 +219,60 @@ function Scroll({ children }: { children: ReactNode }) {
   );
 }
 
-/** The hub's one preference about its own restarts: what was running comes back. */
-function ResumeOnStartToggle() {
-  const setting = useLive(() => api.resumeOnStart(), []);
-  if (!setting.data) return null;
+/** One setting: a switch, its name and what it does. */
+function SettingRow({ label, hint, checked, onChange, disabled }: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void; disabled?: boolean }) {
   return (
-    <Checkbox
-      label="Resume running sessions after a restart"
-      title="Sessions still running when the hub stops (Ctrl+C, a closed window, a crash) are resumed when it starts again; queued runs go back on the queue."
-      checked={setting.data.on}
-      onCheckedChange={(on) => void attempt(() => api.setResumeOnStart(on), on ? "Sessions will be resumed after a restart." : "Sessions stay stopped after a restart.").then(setting.reload)}
-    />
+    <label className={cn("flex cursor-pointer items-start gap-3 px-4 py-3", disabled && "cursor-default opacity-60")}>
+      <Checkbox checked={checked} onCheckedChange={onChange} disabled={disabled} ariaLabel={label} className="mt-0.5" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-medium">{label}</span>
+        <span className="block text-[11px] text-muted-foreground">{hint}</span>
+      </span>
+    </label>
+  );
+}
+
+/**
+ * #/global/hub-settings: how the hub behaves, for every project. The live
+ * panel is this browser's own; the rest is the hub's, for every browser.
+ */
+export function HubSettingsPage() {
+  const settings = useHubSettingsData();
+  const save = useHubSettings((state) => state.save);
+  const panel = useLivePanel();
+  const change = async (patch: Partial<HubSettings>, message: string) => {
+    if (await save(patch)) useStore.getState().notify(message);
+  };
+  return (
+    <Scroll>
+      <PageHeader group="Global" title="Settings" description="How the hub behaves, in every project." />
+      <section className="divide-y rounded-md border">
+        <div className="bg-muted/40 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Layout (this browser)</div>
+        <SettingRow
+          label="Show the live sessions panel"
+          hint="The right sidebar with every project's open sessions. Also the toggle beside the hub's name."
+          checked={panel.open}
+          onChange={(on) => on !== panel.open && panel.toggle()}
+        />
+      </section>
+      <section className="divide-y rounded-md border">
+        <div className="bg-muted/40 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Sessions (the whole hub)</div>
+        <SettingRow
+          label="Confirm before stopping a session"
+          hint="Stop in a session, its menu, a terminal tab's close and Stop all ask first. Off: they stop at once; the conversation is kept for a resume either way."
+          checked={settings?.confirmStop ?? true}
+          disabled={!settings}
+          onChange={(on) => void change({ confirmStop: on }, on ? "Stopping a session asks first." : "Sessions stop without asking.")}
+        />
+        <SettingRow
+          label="Resume running sessions after a restart"
+          hint="Sessions still running when the hub stops (Ctrl+C, a closed window, a crash) are resumed when it starts again; queued runs go back on the queue."
+          checked={settings?.resumeOnStart ?? true}
+          disabled={!settings}
+          onChange={(on) => void change({ resumeOnStart: on }, on ? "Sessions will be resumed after a restart." : "Sessions stay stopped after a restart.")}
+        />
+      </section>
+    </Scroll>
   );
 }
 
@@ -241,12 +287,9 @@ function GlobalProjects() {
         title="Projects"
         description="Every project in the hub, most recently opened first. The bell says whether the global channels hear from it."
         action={
-          <div className="flex flex-wrap items-center gap-3">
-            <ResumeOnStartToggle />
-            <Button variant="primary" onClick={() => setPicking(true)}>
-              <Plus size={12} /> Open folder...
-            </Button>
-          </div>
+          <Button variant="primary" onClick={() => setPicking(true)}>
+            <Plus size={12} /> Open folder...
+          </Button>
         }
       />
       <OpenFolderDialog open={picking} onOpenChange={setPicking} />
@@ -291,6 +334,28 @@ function aboutOf(auth: AuthInfo | null): string {
   return [auth?.org, plan && `${plan} plan`].filter(Boolean).join(" · ");
 }
 
+/** An account's plan usage as /usage shows it: a thin bar per limit, amber from 80%, red from 95%. */
+function UsageBars({ reading, loading }: { reading: UsageReading | undefined; loading: boolean }) {
+  if (!reading) return loading ? <div className="pl-0.5 text-[10px] text-muted-foreground/70">Reading usage...</div> : null;
+  if (reading.error) return <div className="truncate pl-0.5 text-[10px] text-muted-foreground/70" title={reading.error}>Usage: {reading.error}</div>;
+  return (
+    <div className="space-y-0.5 py-0.5" title={`Read from /usage ${new Date(reading.at).toLocaleTimeString()}`}>
+      {reading.items.map((item) => (
+        <div key={item.label} className="flex items-center gap-1.5 text-[10px]" title={`${item.label}: ${item.percent}% used${item.detail ? `, ${item.detail}` : ""}`}>
+          <span className="w-16 shrink-0 truncate">{shortLabel(item.label)}</span>
+          <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+            <span
+              className={cn("block h-full rounded-full", item.percent >= 95 ? "bg-severity-critical" : item.percent >= 80 ? "bg-severity-warning" : "bg-primary")}
+              style={{ width: `${Math.min(100, Math.max(0, item.percent))}%` }}
+            />
+          </span>
+          <span className={cn("w-8 shrink-0 text-right tabular-nums", item.percent >= 95 ? "text-severity-critical" : item.percent >= 80 ? "text-severity-warning" : "")}>{item.percent}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** A name typed into a confirm dialog, read when it is confirmed. */
 function NameField({ holder, placeholder }: { holder: { value: string }; placeholder: string }) {
   const [value, setValue] = useState(holder.value);
@@ -316,6 +381,9 @@ function NameField({ holder, placeholder }: { holder: { value: string }; placeho
 function Accounts() {
   const info = useProfileList();
   const load = useProfiles((state) => state.load);
+  const usage = useUsage((state) => state.data);
+  const usageLoading = useUsage((state) => state.loading);
+  const readingOf = (id: string) => usage?.find((item) => item.profileId === id);
   const go = useStore((state) => state.go);
   const confirm = useConfirm();
   if (!info) return <div>Checking...</div>;
@@ -384,9 +452,16 @@ function Accounts() {
             {about && !signedOut && <span className="text-muted-foreground/70">{` (${about})`}</span>}
           </span>
         );
-        if (!several) return <div key={profile.id} className="flex min-w-0 items-center">{line}</div>;
+        if (!several)
+          return (
+            <div key={profile.id}>
+              <div className="flex min-w-0 items-center">{line}</div>
+              {!signedOut && <UsageBars reading={readingOf(profile.id)} loading={usageLoading} />}
+            </div>
+          );
         return (
-          <div key={profile.id} className={cn("group -mx-1 flex min-w-0 items-center gap-1 rounded px-1 py-0.5", isDefault ? "bg-muted/60" : "hover:bg-muted/40")}>
+          <div key={profile.id}>
+          <div className={cn("group -mx-1 flex min-w-0 items-center gap-1 rounded px-1 py-0.5", isDefault ? "bg-muted/60" : "hover:bg-muted/40")}>
             <button
               onClick={() => void makeDefault(profile)}
               title={isDefault ? "The hub's default account" : `Make ${profile.name} the hub's default`}
@@ -414,6 +489,12 @@ function Accounts() {
               )}
             </span>
           </div>
+          {!signedOut && (
+            <div className="pl-[18px]">
+              <UsageBars reading={readingOf(profile.id)} loading={usageLoading} />
+            </div>
+          )}
+          </div>
         );
       })}
       <button onClick={add} className="flex items-center gap-1 rounded py-0.5 text-[11px] hover:text-foreground" title="Another Claude account, signed in separately">
@@ -428,18 +509,37 @@ function Accounts() {
  * is signed in and on what plan, until when, which version, and how much the
  * hub's sessions used today. Read from `claude auth status` and the transcripts.
  */
+/** Whether this page load has asked Claude Code again yet; not again when the sidebar remounts. */
+let checkedThisLoad = false;
+
 function ClaudeInfo() {
   const hub = useLive(() => api.hub(), []);
   const overview = useLive(() => api.globalOverview(), ["sessions", "projects"]);
   const [checking, setChecking] = useState(false);
   const status = hub.data?.claudeStatus ?? null;
   const loadProfiles = useProfiles((state) => state.load);
+  const loadUsage = useUsage((state) => state.load);
   const recheck = async () => {
     setChecking(true);
+    // Usage takes a few seconds per account: it fills in after the rest.
+    void loadUsage(true);
     await Promise.all([attempt(() => api.checkClaude()), loadProfiles(true)]);
     setChecking(false);
     hub.reload();
   };
+  // The usage again every 15 minutes while the page is open; the hub keeps a reading 10.
+  useEffect(() => {
+    void loadUsage();
+    const timer = window.setInterval(() => document.visibilityState === "visible" && void loadUsage(true), 15 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [loadUsage]);
+  // Asked again once per page load, as if the refresh icon were pressed: a sign-in may have changed meanwhile.
+  useEffect(() => {
+    if (checkedThisLoad) return;
+    checkedThisLoad = true;
+    void recheck();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const tokens = (overview.data ?? []).reduce((total, project) => total + project.tokensToday, 0);
   const active = (overview.data ?? []).reduce((total, project) => total + project.activeToday, 0);
   const signedIn = status?.loggedIn !== false && !status?.problem;
@@ -648,6 +748,8 @@ export function GlobalShell() {
       <SessionView key={view.id} id={view.id} />
     ) : view.kind === "page" && view.page === "inbox" ? (
       <GlobalInbox />
+    ) : view.kind === "page" && view.page === "hub-settings" ? (
+      <HubSettingsPage />
     ) : view.kind === "page" && view.page === "channels" ? (
       <div className="h-full overflow-y-auto">
         <div className="mx-auto max-w-6xl p-5">

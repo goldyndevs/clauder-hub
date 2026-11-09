@@ -40,6 +40,7 @@ export const PAGES = [
   "mcp-suggestions",
   "presets",
   "categories",
+  "hub-settings",
 ] as const;
 export type Page = (typeof PAGES)[number];
 export type View = { kind: "page"; page: Page } | { kind: "session"; id: string } | { kind: "file"; path: string };

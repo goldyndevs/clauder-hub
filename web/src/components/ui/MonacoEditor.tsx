@@ -51,7 +51,7 @@ monaco.editor.defineTheme("clauder-dark", {
 });
 
 /** The Monaco language for a file name, from what Monaco itself registers. */
-function languageOf(path: string): string {
+export function languageOf(path: string): string {
   const name = path.split("/").pop()?.toLowerCase() ?? "";
   const extension = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
   const match = monaco.languages

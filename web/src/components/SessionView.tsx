@@ -8,6 +8,7 @@ import { attempt, openWindow, useStore } from "../lib/store";
 import type { Interaction, SessionDetail } from "../lib/types";
 import { Activity } from "./Activity";
 import { useConfirm } from "./Confirm";
+import { useStopConfirm } from "../lib/hubSettings";
 import { InteractionCard } from "./InteractionCard";
 import { focusNeighbourTerminal, useSessionActions } from "./SessionActions";
 import { SessionSetup } from "./SessionSetup";
@@ -32,6 +33,7 @@ export function SessionView({ id }: { id: string }) {
   const [missing, setMissing] = useState(false);
   const windowed = useStore((state) => state.windowed);
   const confirm = useConfirm();
+  const confirmStop = useStopConfirm();
   const actions = useSessionActions();
   const accountName = profileLabel(useProfileList(), session?.profile);
 
@@ -76,7 +78,7 @@ export function SessionView({ id }: { id: string }) {
   const open = (data?.interactions ?? []).filter((item) => item.status === "open");
   const resume = () => attempt(() => api.resumeSession(id));
   const kill = () =>
-    confirm({
+    confirmStop({
       title: "Stop this session?",
       description: "The conversation is kept for a later resume.",
       confirmLabel: "Stop",

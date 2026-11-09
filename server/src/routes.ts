@@ -20,6 +20,8 @@ import { addProject, allProjects, getProject, listProjects, removeProject, touch
 import { promptDefinitions, renderPrompt, setPrompt } from "./prompts.js";
 import { closeOpenSessions, getSessionRow, hubUrl, listSessions, openSessionIds, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
 import { resumeOnStart, setResumeOnStart } from "./resume.js";
+import { hubSettings, saveHubSettings } from "./hubSettings.js";
+import { usageOfAll } from "./usage.js";
 import { createProfile, hubDefaultProfile, listProfiles, profileAuth, removeProfile, renameProfile, setHubDefaultProfile } from "./profiles.js";
 import { killTerminal, terminalForSession } from "./terminals.js";
 import { isPurpose, purposeNote, purposeTitle } from "./purposes.js";
@@ -205,6 +207,13 @@ hubApi.post("/hub/profiles", wrap((req) => createProfile(req.body?.name)));
 hubApi.put("/hub/profiles/:id", wrap((req) => renameProfile(req.params.id, req.body?.name)));
 hubApi.delete("/hub/profiles/:id", wrap((req) => removeProfile(req.params.id)));
 hubApi.put("/hub/default-profile", wrap((req) => ({ defaultId: setHubDefaultProfile(String(req.body?.id ?? "")) })));
+
+/** How much of each account's plan is used, read from Claude Code's /usage. */
+hubApi.get("/hub/usage", wrap((req) => usageOfAll(req.query.fresh === "1")));
+
+/** The hub's own preferences: the global Settings page. */
+hubApi.get("/hub/settings", wrap(() => hubSettings()));
+hubApi.put("/hub/settings", wrap((req) => saveHubSettings(req.body ?? {})));
 
 /** Whether the sessions running when the hub stops are resumed when it starts. */
 hubApi.get("/hub/resume-on-start", wrap(() => ({ on: resumeOnStart() })));

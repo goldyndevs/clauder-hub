@@ -81,6 +81,11 @@ export const api = {
   renameProfile: (id: string, name: string) => hubRequest<Profile>(`/hub/profiles/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name }) }),
   removeProfile: (id: string) => hubRequest<{ folder: string }>(`/hub/profiles/${encodeURIComponent(id)}`, { method: "DELETE" }),
   setDefaultProfile: (id: string) => hubRequest<{ defaultId: string }>("/hub/default-profile", { method: "PUT", body: JSON.stringify({ id }) }),
+  usage: (fresh = false) =>
+    hubRequest<Array<{ profileId: string; at: string; items: Array<{ label: string; percent: number; detail: string }>; error: string | null }>>(`/hub/usage${fresh ? "?fresh=1" : ""}`),
+  hubSettings: () => hubRequest<{ resumeOnStart: boolean; confirmStop: boolean }>("/hub/settings"),
+  saveHubSettings: (patch: Partial<{ resumeOnStart: boolean; confirmStop: boolean }>) =>
+    hubRequest<{ resumeOnStart: boolean; confirmStop: boolean }>("/hub/settings", { method: "PUT", body: JSON.stringify(patch) }),
   resumeOnStart: () => hubRequest<{ on: boolean }>("/hub/resume-on-start"),
   setResumeOnStart: (on: boolean) => hubRequest<{ on: boolean }>("/hub/resume-on-start", { method: "PUT", body: JSON.stringify({ on }) }),
   projects: () => hubRequest<ProjectInfo[]>("/projects"),

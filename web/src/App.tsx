@@ -7,7 +7,7 @@ import { ClaudeSettingsPage } from "./components/ClaudeSettingsPage";
 import { ConfirmProvider } from "./components/Confirm";
 import { FileView } from "./components/FileView";
 import { HubPromptsPage } from "./components/HubPromptsPage";
-import { GlobalShell } from "./components/GlobalPage";
+import { GlobalShell, HubSettingsPage } from "./components/GlobalPage";
 import { GLOBAL_ID } from "./lib/project";
 import { InboxPage } from "./components/InboxPage";
 import { LivePanel, useLivePanel } from "./components/LivePanel";
@@ -81,6 +81,7 @@ const PAGE_VIEW: Record<Page, () => ReactNode> = {
   "mcp-suggestions": () => <McpSuggestionsPage />,
   presets: () => <PresetsPage />,
   categories: () => <CategoriesPage />,
+  "hub-settings": () => <HubSettingsPage />,
 };
 
 export default function App() {

@@ -1,4 +1,4 @@
-import { Code, ExternalLink, Eye, FileWarning, GitCommitHorizontal, Save } from "lucide-react";
+import { Code, ExternalLink, Eye, FileWarning, GitCommitHorizontal, GitCompare, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { isDirty, useAutoSave, useDrafts } from "../lib/fileDrafts";
@@ -6,6 +6,8 @@ import { filesApi, FilesError, isHtml, isMarkdown, mediaKind, rawUrl, type Blame
 import { currentProjectId } from "../lib/project";
 import { useStore } from "../lib/store";
 import { useOpenFiles } from "../lib/openFiles";
+import { STATUS_LABEL, useDiffMode, useGitChanges } from "../lib/gitChanges";
+import { CodeDiff } from "./ui/CodeDiff";
 import { DiffView } from "./FileEditor";
 import { PageHeader } from "./Page";
 import { Button } from "./ui/Button";
@@ -94,6 +96,24 @@ export function FileView({ path }: { path: string }) {
   const dirty = isDirty(draft);
   const media = mediaKind(path);
   const html = isHtml(path);
+  // Changed in git: the header offers the diff against HEAD, side by side, the right side editable.
+  const changes = useGitChanges();
+  const change = media ? null : (changes.data?.files.find((item) => item.path === path) ?? null);
+  const diffOn = useDiffMode((state) => state.paths.has(path)) && Boolean(change);
+  const [original, setOriginal] = useState<{ text: string } | { error: string } | null>(null);
+  const changeKey = change ? `${change.status}:${change.from ?? ""}` : "";
+  useEffect(() => {
+    if (!diffOn || !change) return setOriginal(null);
+    let alive = true;
+    filesApi.original(path, change.from ?? undefined).then(
+      (result) => alive && setOriginal({ text: result.content }),
+      (cause: Error) => alive && setOriginal({ error: cause.message }),
+    );
+    return () => {
+      alive = false;
+    };
+    // The text at HEAD only moves with a commit, which changes the file's status or drops it from the list.
+  }, [diffOn, path, changeKey]);
   const [htmlView, setHtmlView] = useState<"preview" | "code">("preview");
   const [blame, setBlame] = useState<Blame | null>(null);
   const [fileBlame, setFileBlame] = useState(() => {
@@ -277,7 +297,17 @@ export function FileView({ path }: { path: string }) {
           title={name}
           description={folder}
           action={
-            (media || draft) && (
+            <>
+              {change && (
+                <Button
+                  onClick={() => useDiffMode.getState().set(path, !diffOn)}
+                  className={cn(diffOn && "bg-primary/15 text-primary")}
+                  title={diffOn ? "Show the file" : `${STATUS_LABEL[change.status]}: compare with HEAD, side by side`}
+                >
+                  <GitCompare size={13} /> {diffOn ? "Changes" : "Show changes"}
+                </Button>
+              )}
+              {(media || draft) && (
               <>
                 {html && draft && (
                   <Button onClick={() => setHtmlView(htmlView === "preview" ? "code" : "preview")} title={htmlView === "preview" ? "Edit the HTML" : "Show the page"}>
@@ -311,7 +341,8 @@ export function FileView({ path }: { path: string }) {
                   </>
                 )}
               </>
-            )
+              )}
+            </>
           }
         />
         {blame && (
@@ -373,7 +404,25 @@ export function FileView({ path }: { path: string }) {
         )}
       </div>
       <div className="min-h-0 flex-1 px-5 pb-5">
-        {media ? (
+        {diffOn && change ? (
+          !original ? (
+            <div className="text-xs text-muted-foreground">Loading changes...</div>
+          ) : "error" in original ? (
+            <Empty icon={FileWarning} title={original.error} />
+          ) : change.status === "D" ? (
+            <div className="h-full overflow-hidden rounded border">
+              <CodeDiff path={path} original={original.text} modified="" />
+            </div>
+          ) : draft ? (
+            <div className="h-full overflow-hidden rounded border">
+              <CodeDiff path={path} original={original.text} modified={draft.text} onChange={edit} />
+            </div>
+          ) : error ? (
+            <Empty icon={FileWarning} title={error} />
+          ) : (
+            <div className="text-xs text-muted-foreground">Loading...</div>
+          )
+        ) : media ? (
           <MediaView path={path} kind={media} tick={filesTick} />
         ) : error ? (
           <Empty icon={FileWarning} title={error} />

@@ -4,6 +4,7 @@ import { bytes } from "../lib/format";
 import { useStore } from "../lib/store";
 import type { Session } from "../lib/types";
 import { useConfirm } from "./Confirm";
+import { useStopConfirm } from "../lib/hubSettings";
 import { Checkbox } from "./ui/Checkbox";
 import { Input } from "./ui/Input";
 
@@ -45,6 +46,7 @@ export function focusNeighbourTerminal(stopped: string[]): void {
 /** Rename, stop and delete, shared by the session header and the sidebar's right-click menu. */
 export function useSessionActions() {
   const confirm = useConfirm();
+  const confirmStop = useStopConfirm();
   const name = useRef("");
   const clearTemp = useRef(true);
 
@@ -126,7 +128,7 @@ export function useSessionActions() {
   };
 
   const stop = (session: Pick<Session, "id" | "title">, projectId?: string) =>
-    confirm({
+    confirmStop({
       title: `Stop "${session.title}"?`,
       description: "The conversation is kept for a later resume.",
       confirmLabel: "Stop",

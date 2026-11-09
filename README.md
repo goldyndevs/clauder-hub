@@ -71,7 +71,7 @@ Clauder Hub runs the real `claude` you already use, in real terminals, and adds 
   <tr>
     <td>
       <h3>Cron, webhooks and a queue</h3>
-      Nightly test triage, weekly dependency audits, a run per new GitHub issue. Each project has one queue, and a task category defines what "done" means before a run may close.
+      Nightly test triage, weekly dependency audits, a run per new GitHub issue. Each project has one queue that runs one or several runs side by side, jobs take <code>{{parameters}}</code> asked by Run now or sent by the webhook, and a task category defines what "done" means before a run may close.
     </td>
     <td>
       <img src="docs/assets/automation.jpg" width="100%" alt="The Automation page: cron and webhook jobs and the queue of finished runs">
@@ -98,7 +98,7 @@ Clauder Hub runs the real `claude` you already use, in real terminals, and adds 
   <tr>
     <td>
       <h3>Files and editor</h3>
-      A file tree and a Monaco editor with tabs sit beside your sessions, with GitLens-style blame from <code>git blame</code>, so you can check what Claude changed without leaving the page.
+      A file tree and a Monaco editor with tabs sit beside your sessions, with GitLens-style blame from <code>git blame</code>. Tick <b>Changed</b> to see only what git sees changed, and open a file as a side by side diff against HEAD, editable on the right, as in VS Code.
     </td>
     <td>
       <img src="docs/assets/files.jpg" width="100%" alt="The Files tab and the editor showing src/lib/cart.ts with its last change">
@@ -109,7 +109,13 @@ Clauder Hub runs the real `claude` you already use, in real terminals, and adds 
 **Also in the box:**
 
 - **The global page.** A card per project with what is running, waiting and queued, plus one global bot that tags each message with its project (`/projects`, `/use`, `/addproject`).
-- **No forms.** Creating a job, a run, a category, a preset or a channel opens a Claude session for it: Claude asks, shows the JSON and saves it after your yes.
+- **Many sessions at once.** A live panel of every project's sessions, terminals kept alive while you switch, and keys for the moves you repeat: Ctrl+K to jump anywhere, Alt+1..9 for the open sessions, Alt+W for the next one waiting on you, Ctrl+F to search a terminal, Ctrl+Enter to send now. Drop a file on a terminal to paste its path; select text to copy it.
+- **Several Claude accounts.** Add accounts on the global page, each with its own sign-in, and pick one for the hub, per project or per session. Skills, agents, plugins and settings stay shared.
+- **Survives a restart.** Sessions running when the hub stops (or crashes) are resumed when it starts again; queued runs go back on the queue.
+- **Forms, or Claude.** Jobs, runs, categories, presets and channels have forms; **Set up with Claude** hands the form to a Claude session instead, which carries on from what you filled in.
+- **Variables.** The env and headers Claude Code gets from `.mcp.json`, `~/.claude.json` and the settings files, masked, with token expiry (JWTs, GitHub) and rotation written straight into the file after a confirm.
+- **Where things stand.** The project's git branch and changes at the foot of the sidebar, recent projects under its name, and on the global page each Claude account with its plan, its session and weekly usage (read from Claude Code's own `/usage`, no tokens spent) and today's tokens.
+- **Settings.** A global Settings page: the live panel, asking before a session is stopped, resuming after a restart.
 - **Natural-language fallbacks.** Misspell a command or describe a session ("the one fixing the login bug") and a small Haiku call offers its guesses as buttons. Nothing runs until you press one.
 - **Prompts, memory and inventory.** Edit every word the hub adds to a session, edit `CLAUDE.md`, rules, agents and skills after a diff, and see every agent, skill, command, MCP server, hook and plugin by scope.
 - **MCP suggestions.** A session blocked on a missing integration says so; `claude mcp add --scope project` runs only when you approve it.
@@ -159,13 +165,16 @@ npm run dev -- /path/to/a/project   # server and web with reload
 No. It runs the `claude` you already have, with your login, settings and plugins, in a real terminal.
 
 **Does it write anything into my Claude Code setup?**
-No. Hooks and the extra system prompt are passed per process with `--settings` and `--append-system-prompt-file`. The only exceptions are ones you ask for by name: a suggested `claude mcp add --scope project`, or saving an instruction file after its diff.
+No. Hooks and the extra system prompt are passed per process with `--settings` and `--append-system-prompt-file`. The only exceptions are ones you ask for by name: a suggested `claude mcp add --scope project`, saving an instruction file after its diff, or rotating a value on the Variables page. An added Claude account gets a folder of its own under `~/.clauder-hub/profiles`.
 
 **Do I need a public URL for Telegram or Slack?**
 No. Telegram uses long polling and Slack uses Socket Mode, both outgoing connections.
 
 **What happens when I close the browser?**
 Sessions keep running in the hub. Reopen the page and attach again.
+
+**And when I stop the hub?**
+Its sessions stop with it, and come back by themselves the next time it starts (a switch on the global page turns that off). Their conversations are in Claude Code's transcripts either way.
 
 **Can it see sessions I started in a normal terminal?**
 Yes, with their stats. Resume one in the hub to answer it from the inbox or a channel.
