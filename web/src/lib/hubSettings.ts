@@ -7,6 +7,7 @@ import { useStore } from "./store";
 export interface HubSettings {
   resumeOnStart: boolean;
   confirmStop: boolean;
+  fullscreen: boolean;
 }
 
 /** The hub's own preferences (the global Settings page), read once for the page. */

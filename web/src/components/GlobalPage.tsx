@@ -265,6 +265,13 @@ export function HubSettingsPage() {
           onChange={(on) => void change({ confirmStop: on }, on ? "Stopping a session asks first." : "Sessions stop without asking.")}
         />
         <SettingRow
+          label="Fullscreen terminal"
+          hint="Sessions run Claude Code's fullscreen renderer: a click moves the cursor in the prompt and the wheel scrolls inside Claude. Claude Code can turn its own fullscreen setting off after a glitch; this keeps it on. Applies to sessions started or resumed from now on."
+          checked={settings?.fullscreen ?? false}
+          disabled={!settings}
+          onChange={(on) => void change({ fullscreen: on }, on ? "New and resumed sessions run fullscreen." : "Sessions follow Claude Code's own setting again.")}
+        />
+        <SettingRow
           label="Resume running sessions after a restart"
           hint="Sessions still running when the hub stops (Ctrl+C, a closed window, a crash) are resumed when it starts again; queued runs go back on the queue."
           checked={settings?.resumeOnStart ?? true}

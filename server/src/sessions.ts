@@ -15,6 +15,7 @@ import { allTerminals, killTerminal, listTerminals, spawnTerminal, terminalForSe
 import { defaultToolset, normaliseToolset, toolsetSettings, type Toolset } from "./toolset.js";
 import { purposeSystemPrompt, purposeTitle, type Purpose } from "./purposes.js";
 import { getProfile, profileEnv, profileOfSession, projectProfile, sharedSettings } from "./profiles.js";
+import { sessionEnvFromSettings } from "./hubSettings.js";
 import { listTranscripts, type TranscriptSummary } from "./transcripts.js";
 
 export type Origin = "manual" | "cron" | "webhook" | "queue";
@@ -246,7 +247,7 @@ export function startSession(options: StartOptions): Terminal {
   ).run(sessionId, existing?.origin ?? options.origin ?? "manual", options.runId ?? null, category, JSON.stringify(toolset), purpose ? JSON.stringify(purpose) : null, profile, stamp, stamp);
 
   openSessionsAdd(sessionId);
-  return spawnTerminal({ file: claude, args, sessionId, token, cols: options.cols, rows: options.rows, env: profileEnv(profile) });
+  return spawnTerminal({ file: claude, args, sessionId, token, cols: options.cols, rows: options.rows, env: { ...sessionEnvFromSettings(), ...profileEnv(profile) } });
 }
 
 /**
