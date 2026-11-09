@@ -2,7 +2,7 @@ import { bindProject, currentProject } from "./context.js";
 import fs from "node:fs";
 import path from "node:path";
 import { broadcast } from "./events.js";
-import { transcriptsDir } from "./paths.js";
+import { transcriptFile, transcriptsDirs } from "./paths.js";
 
 /**
  * Everything the dashboard shows about what a session did comes from the
@@ -250,7 +250,7 @@ function skillsOf(calls: Iterable<ToolCall>, commands: Map<string, number>): Rec
 }
 
 function refreshSubagents(state: SessionState): boolean {
-  const dir = path.join(transcriptsDir(), state.id, "subagents");
+  const dir = path.join(path.dirname(state.file), state.id, "subagents");
   let names: string[];
   try {
     names = fs.readdirSync(dir);
@@ -287,7 +287,7 @@ export function forgetTranscript(id: string): void {
 function stateOf(id: string): SessionState | null {
   let state = sessions.get(stateKey(id));
   if (!state) {
-    const file = path.join(transcriptsDir(), `${id}.jsonl`);
+    const file = transcriptFile(id);
     if (!fs.existsSync(file)) return null;
     state = { id, file, acc: new TranscriptAccumulator(), subagents: new Map() };
     sessions.set(stateKey(id), state);
@@ -377,17 +377,23 @@ function allUsages(state: SessionState): Usage[] {
   return [...seen.values()];
 }
 
-export function listTranscripts(): TranscriptSummary[] {
-  let names: string[];
-  try {
-    names = fs.readdirSync(transcriptsDir());
-  } catch {
-    return [];
+/** The session ids with a transcript, in every account's folder. */
+function transcriptIds(): string[] {
+  const ids = new Set<string>();
+  for (const dir of transcriptsDirs()) {
+    try {
+      for (const name of fs.readdirSync(dir)) if (name.endsWith(".jsonl")) ids.add(name.slice(0, -".jsonl".length));
+    } catch {
+      // This account has no session in the project yet.
+    }
   }
+  return [...ids];
+}
+
+export function listTranscripts(): TranscriptSummary[] {
   const summaries: TranscriptSummary[] = [];
-  for (const name of names) {
-    if (!name.endsWith(".jsonl")) continue;
-    const state = stateOf(name.slice(0, -".jsonl".length));
+  for (const id of transcriptIds()) {
+    const state = stateOf(id);
     if (!state) continue;
     refresh(state.file, state.acc);
     refreshSubagents(state);
@@ -457,7 +463,7 @@ export function lastToolResultAt(id: string): string | null {
 
 export function transcriptMtime(id: string): number {
   try {
-    return fs.statSync(path.join(transcriptsDir(), `${id}.jsonl`)).mtimeMs;
+    return fs.statSync(transcriptFile(id)).mtimeMs;
   } catch {
     return 0;
   }
@@ -470,26 +476,27 @@ export function transcriptMtime(id: string): number {
 export function startTranscriptWatcher(intervalMs = 1500): () => void {
   const seen = new Map<string, number>();
   const tick = () => {
-    let names: string[];
-    try {
-      names = fs.readdirSync(transcriptsDir());
-    } catch {
-      return;
+    const files: Array<[string, string]> = [];
+    for (const dir of transcriptsDirs()) {
+      try {
+        for (const name of fs.readdirSync(dir)) if (name.endsWith(".jsonl")) files.push([dir, name]);
+      } catch {
+        // This account has no session in the project yet.
+      }
     }
     let listChanged = false;
-    for (const name of names) {
-      if (!name.endsWith(".jsonl")) continue;
+    for (const [dir, name] of files) {
       const id = name.slice(0, -".jsonl".length);
       let stamp = 0;
       try {
-        stamp = fs.statSync(path.join(transcriptsDir(), name)).mtimeMs;
+        stamp = fs.statSync(path.join(dir, name)).mtimeMs;
       } catch {
         continue;
       }
       // Subagents write to their own files while the main one stays still.
       try {
-        for (const sub of fs.readdirSync(path.join(transcriptsDir(), id, "subagents"))) {
-          if (sub.endsWith(".jsonl")) stamp = Math.max(stamp, fs.statSync(path.join(transcriptsDir(), id, "subagents", sub)).mtimeMs);
+        for (const sub of fs.readdirSync(path.join(dir, id, "subagents"))) {
+          if (sub.endsWith(".jsonl")) stamp = Math.max(stamp, fs.statSync(path.join(dir, id, "subagents", sub)).mtimeMs);
         }
       } catch {
         // No subagents yet.

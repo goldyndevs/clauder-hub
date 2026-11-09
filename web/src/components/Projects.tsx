@@ -1,15 +1,17 @@
-import { ArrowUp, BellOff, ChevronRight, FolderGit2, FolderOpen, HardDrive, Home } from "lucide-react";
+import { ArrowUp, BellOff, ChevronDown, ChevronRight, FolderGit2, FolderOpen, HardDrive, Home } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { GLOBAL_ID } from "../lib/project";
-import { useLive, useStore } from "../lib/store";
+import { ago } from "../lib/format";
+import { prefetchProject, useLive, useStore } from "../lib/store";
 import type { Folders } from "../lib/types";
 import { showNotificationsSwitch } from "./ChannelsPage";
 import { Logo } from "./Logo";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Modal } from "./ui/Modal";
+import { Popover } from "./ui/Popover";
 import { LivePanelToggle } from "./LivePanel";
 import { ShortcutsButton } from "./Shortcuts";
 
@@ -176,6 +178,62 @@ function PausedBell() {
     >
       <BellOff size={12} />
     </button>
+  );
+}
+
+/**
+ * The project's name under the title, opening the projects most recently
+ * opened first; one is opened from there, and read ahead while hovered.
+ */
+export function RecentProjects({ name, root }: { name: string; root?: string }) {
+  const projectId = useStore((state) => state.projectId);
+  const openProject = useStore((state) => state.openProject);
+  const [open, setOpen] = useState(false);
+  const projects = useLive(() => api.projects(), ["projects"]);
+  const list = [...(projects.data ?? [])].sort((a, b) => b.openedAt.localeCompare(a.openedAt));
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      align="start"
+      className="w-72 p-1"
+      trigger={
+        <button className="flex min-w-0 items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground" title={root ? `${root}\nClick for recent projects` : "Recent projects"}>
+          <span className="truncate">{name}</span>
+          <ChevronDown size={10} className="shrink-0" />
+        </button>
+      }
+    >
+      <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Recent projects</div>
+      <div className="max-h-80 overflow-y-auto">
+        {list.map((project) => {
+          const current = project.id === projectId;
+          return (
+            <button
+              key={project.id}
+              disabled={!project.exists}
+              onMouseEnter={() => !current && project.exists && prefetchProject(project.id)}
+              onClick={() => {
+                setOpen(false);
+                if (!current) openProject(project.id);
+              }}
+              title={project.exists ? project.root : `${project.root} (folder not found)`}
+              className={cn("flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted disabled:opacity-50", current && "bg-muted")}
+            >
+              <FolderGit2 size={13} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{project.name}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">{project.root}</span>
+              </span>
+              {project.waiting > 0 && <span className="shrink-0 rounded-full bg-severity-warning px-1.5 text-[10px] font-semibold text-background">{project.waiting}</span>}
+              {project.running > 0 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" title={`${project.running} running`} />}
+              <span className="shrink-0 text-[10px] text-muted-foreground">{current ? "open" : ago(project.openedAt)}</span>
+            </button>
+          );
+        })}
+        {projects.data && !list.length && <div className="px-2 py-1.5 text-[11px] text-muted-foreground">No projects yet.</div>}
+      </div>
+    </Popover>
   );
 }
 

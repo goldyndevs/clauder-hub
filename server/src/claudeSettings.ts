@@ -19,6 +19,8 @@ export interface ClaudeSettings {
   addDirs: string[];
   /** Claude in Chrome: "on", "off", or "" for the user's own setting. */
   chrome: string;
+  /** The Claude account (profiles.ts) new sessions of this project use; "" for the hub's default. */
+  account: string;
 }
 
 /** What this Claude Code accepts; "default" is the older name of "manual" and still works. */
@@ -34,6 +36,7 @@ const DEFAULTS: ClaudeSettings = {
   effort: "",
   addDirs: [],
   chrome: "",
+  account: "",
 };
 
 export function claudeSettings(): ClaudeSettings {
@@ -58,6 +61,7 @@ export function saveClaudeSettings(input: Partial<ClaudeSettings>): ClaudeSettin
   // Model names are aliases ("opus") or full ids ("claude-opus-5-5[1m]"): one word, no spaces.
   check(word.test(next.model) && word.test(next.fallbackModel), "A model is one word, like opus or claude-sonnet-5-5.");
   check(["", "on", "off"].includes(next.chrome), "Claude in Chrome is on, off or your own setting.");
+  check(typeof next.account === "string", "The account is an account id.");
   next.addDirs = (Array.isArray(next.addDirs) ? next.addDirs : []).map((dir) => String(dir).trim()).filter(Boolean);
   db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('claude', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").run(
     JSON.stringify(next),

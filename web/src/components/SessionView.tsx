@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { compact, totalTokens, when } from "../lib/format";
+import { profileLabel, useProfileList } from "../lib/profiles";
 import { attempt, openWindow, useStore } from "../lib/store";
 import type { Interaction, SessionDetail } from "../lib/types";
 import { Activity } from "./Activity";
@@ -32,6 +33,7 @@ export function SessionView({ id }: { id: string }) {
   const windowed = useStore((state) => state.windowed);
   const confirm = useConfirm();
   const actions = useSessionActions();
+  const accountName = profileLabel(useProfileList(), session?.profile);
 
   // Opening a session opens its terminal: one that is not running is resumed straight away.
   // Decided once per visit, so stopping it here does not bring it back on its own.
@@ -97,6 +99,7 @@ export function SessionView({ id }: { id: string }) {
             <StatusBadge tone={session.status === "waiting" ? "warning" : session.status === "running" || session.status === "idle" ? "success" : session.status === "done" ? "on" : "off"}>{session.status}</StatusBadge>
             <StatusBadge tone="off">{session.origin === "external" ? "started in a terminal" : `from ${session.origin}`}</StatusBadge>
             {session.category && <StatusBadge tone="off">category: {session.category}</StatusBadge>}
+            {accountName && <StatusBadge tone="off">account: {accountName}</StatusBadge>}
             {session.purpose && (
               <StatusBadge tone="on" icon={Wrench}>
                 hub task: {session.purpose.title}

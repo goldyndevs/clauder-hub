@@ -12,6 +12,7 @@ import {
   ChevronsRight,
   Command,
   KeyRound,
+  UserRound,
   LayoutDashboard,
   Menu,
   MoreHorizontal,
@@ -43,8 +44,9 @@ import { api } from "../lib/api";
 import { attempt, openWindow, useStore, type Page } from "../lib/store";
 import type { PurposeKind, Session } from "../lib/types";
 import { usePurpose } from "../lib/usePurpose";
+import { useProfileList } from "../lib/profiles";
 import { FileTree } from "./FileTree";
-import { LogoLink, ProjectSwitcher, TitleLink } from "./Projects";
+import { LogoLink, ProjectSwitcher, RecentProjects, TitleLink } from "./Projects";
 import { useSessionActions } from "./SessionActions";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
@@ -199,15 +201,15 @@ function useFolded(): [Set<string>, (id: string) => void] {
  * `beside`, what the sidebar takes), so the TUI does not redraw at another
  * width when the page attaches.
  */
-function useNewSession(beside: number): { starting: boolean; newSession: () => Promise<void> } {
+function useNewSession(beside: number): { starting: boolean; newSession: (profile?: string) => Promise<void> } {
   const go = useStore((state) => state.go);
   const [starting, setStarting] = useState(false);
-  const newSession = async () => {
+  const newSession = async (profile?: string) => {
     if (starting) return;
     setStarting(true);
     const cols = Math.max(80, Math.floor((window.innerWidth - beside - 40) / 7.8));
     const rows = Math.max(24, Math.floor((window.innerHeight - 140) / 17));
-    const started = await attempt(() => api.startSession({ cols, rows }));
+    const started = await attempt(() => api.startSession({ cols, rows, profile }));
     setStarting(false);
     if (!started) return;
     await useStore.getState().refreshSessions();
@@ -234,6 +236,7 @@ const HUB_TASKS: Array<{ kind: PurposeKind; label: string; icon: typeof Bell }> 
 function NewSessionButton({ beside, size = "sm", full = false }: { beside: number; size?: "sm" | "md"; full?: boolean }) {
   const { starting, newSession } = useNewSession(beside);
   const { starting: startingTask, start } = usePurpose();
+  const accounts = useProfileList();
   const [open, setOpen] = useState(false);
   const busy = starting || startingTask;
   const pick = (run: () => Promise<void>) => {
@@ -263,9 +266,26 @@ function NewSessionButton({ beside, size = "sm", full = false }: { beside: numbe
           </Button>
         }
       >
-        <button className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted" onClick={() => pick(newSession)}>
+        <button className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted" onClick={() => pick(() => newSession())}>
           <Plus size={13} /> New session
         </button>
+        {accounts && accounts.profiles.length > 1 && (
+          <>
+            <div className="mx-2 mb-0.5 mt-1.5 border-t pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">New session as</div>
+            {accounts.profiles.map((profile) => (
+              <button
+                key={profile.id}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                title={profile.auth?.account ?? profile.configDir}
+                onClick={() => pick(() => newSession(profile.id))}
+              >
+                <UserRound size={13} className="shrink-0 text-primary" />
+                <span className="min-w-0 flex-1 truncate">{profile.name}</span>
+                {profile.auth?.account && <span className="min-w-0 max-w-[50%] truncate text-[10px] text-muted-foreground">{profile.auth.account}</span>}
+              </button>
+            ))}
+          </>
+        )}
         <div className="mx-2 mb-0.5 mt-1.5 border-t pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Hub task</div>
         {HUB_TASKS.map((task) => (
           <button key={task.kind} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted" onClick={() => pick(() => start(task.kind))}>
@@ -289,7 +309,7 @@ export function MobileBar({ onMenu }: { onMenu: () => void }) {
       <div className="min-w-0 flex-1">
         <TitleLink />
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-[11px] text-muted-foreground">{health?.project ?? "..."}</span>
+          <RecentProjects name={health?.project ?? "..."} root={health?.projectRoot} />
           <ProjectSwitcher />
         </div>
       </div>
@@ -363,23 +383,21 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
 
   return (
     <aside className="flex shrink-0 flex-col" style={{ width }}>
-      <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+      <div className="flex items-start gap-2 px-3 pb-2 pt-3">
         <LogoLink />
         <div className="min-w-0">
           <TitleLink />
           <div className="flex min-w-0 items-center gap-1.5">
-            <Tooltip content={health?.projectRoot} wide className="min-w-0">
-              <div className="truncate text-[11px] text-muted-foreground">{health?.project ?? "..."}</div>
-            </Tooltip>
+            <RecentProjects name={health?.project ?? "..."} root={health?.projectRoot} />
             <ProjectSwitcher />
           </div>
         </div>
         {drawer ? (
-          <Button variant="ghost" size="icon" className="ml-auto" onClick={onToggle} aria-label="Close menu">
+          <Button variant="ghost" size="icon" className="ml-auto self-center" onClick={onToggle} aria-label="Close menu">
             <X size={15} />
           </Button>
         ) : (
-          <Button variant="ghost" size="icon" className="ml-auto" onClick={onToggle} aria-label="Collapse sidebar">
+          <Button variant="ghost" size="icon" className="ml-auto self-center" onClick={onToggle} aria-label="Collapse sidebar">
             <ChevronsLeft size={15} />
           </Button>
         )}
@@ -462,12 +480,12 @@ export function Sidebar({ width, collapsed, onToggle, drawer = false }: { width:
           <>
             {/* Stays put while the list scrolls under it. */}
             <div className="sticky top-0 z-10 bg-background px-3 pb-1">
+              <div className="mb-1.5">
+                <NewSessionButton beside={sideWidth} full />
+              </div>
               <div className="relative">
                 <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sessions" className="pl-6" />
-              </div>
-              <div className="mt-1.5">
-                <NewSessionButton beside={sideWidth} full />
               </div>
             </div>
             <div className="px-2">

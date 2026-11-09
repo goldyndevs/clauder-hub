@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { db } from "./db.js";
 import { broadcast } from "./events.js";
-import { claudeHome, projectRoot, projectSlug, transcriptsDir } from "./paths.js";
+import { projectRoot, projectSlug, transcriptFile as locateTranscript } from "./paths.js";
 import { killTerminal, terminalForSession, waitForExit } from "./terminals.js";
 import { forgetTranscript } from "./transcripts.js";
 
@@ -18,7 +18,12 @@ function checkId(id: string): void {
 }
 
 function transcriptFile(id: string): string {
-  return path.join(transcriptsDir(), `${id}.jsonl`);
+  return locateTranscript(id);
+}
+
+/** The Claude folder of the account the session ran under: <folder>/projects/<project>/<id>.jsonl. */
+function configDirOf(id: string): string {
+  return path.resolve(transcriptFile(id), "..", "..", "..");
 }
 
 /**
@@ -107,9 +112,9 @@ export function deletionPlan(id: string): DeletionPlan {
   checkId(id);
   const candidates: Array<[string, string]> = [
     [transcriptFile(id), "transcript"],
-    [path.join(transcriptsDir(), id), "subagent transcripts and tool output"],
-    [path.join(claudeHome, "file-history", id), "file snapshots used to rewind"],
-    [path.join(claudeHome, "session-env", id), "session environment"],
+    [path.join(path.dirname(transcriptFile(id)), id), "subagent transcripts and tool output"],
+    [path.join(configDirOf(id), "file-history", id), "file snapshots used to rewind"],
+    [path.join(configDirOf(id), "session-env", id), "session environment"],
   ];
   const files = candidates.filter(([target]) => fs.existsSync(target)).map(([target, what]) => ({ path: target, bytes: sizeOf(target), what }));
   const temp = tempDirOf(id);

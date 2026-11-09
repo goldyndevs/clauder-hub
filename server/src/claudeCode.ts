@@ -84,12 +84,17 @@ export interface ClaudeStatus {
   checkedAt: number;
 }
 
-const run = (file: string, args: string[]) =>
+const run = (file: string, args: string[], env?: Record<string, string>) =>
   new Promise<{ ok: boolean; out: string }>((resolve) => {
     try {
       // A .cmd shim (CLAUDER_HUB_CLAUDE may name one) only runs through the shell.
       const shell = /\.(cmd|bat)$/i.test(file);
-      execFile(shell ? `"${file}"` : file, args, { encoding: "utf8", windowsHide: true, timeout: 20_000, shell }, (error, stdout) => resolve({ ok: !error, out: String(stdout ?? "") }));
+      execFile(
+        shell ? `"${file}"` : file,
+        args,
+        { encoding: "utf8", windowsHide: true, timeout: 20_000, shell, env: env ? { ...process.env, ...env } : undefined },
+        (error, stdout) => resolve({ ok: !error, out: String(stdout ?? "") }),
+      );
     } catch {
       // Not something that runs at all (a broken install): spawn throws before any callback.
       resolve({ ok: false, out: "" });
@@ -138,6 +143,37 @@ async function check(): Promise<ClaudeStatus> {
     message: signedOut ? "Claude Code is installed but not signed in." : null,
     fix: signedOut ? "claude auth login" : null,
   };
+}
+
+/** Who a Claude Code config folder is signed in as; without one, the default folder. */
+export interface AuthInfo {
+  loggedIn: boolean | null;
+  account: string | null;
+  authMethod: string | null;
+  org: string | null;
+  plan: string | null;
+  loginExpiresAt: string | null;
+}
+
+export async function readAuth(configDir?: string): Promise<AuthInfo> {
+  const none: AuthInfo = { loggedIn: null, account: null, authMethod: null, org: null, plan: null, loginExpiresAt: null };
+  const found = findClaudeCode();
+  if (!found) return none;
+  const auth = await run(found, ["auth", "status"], configDir ? { CLAUDE_CONFIG_DIR: configDir } : undefined);
+  const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+  try {
+    const parsed = JSON.parse(auth.out) as Record<string, unknown>;
+    return {
+      loggedIn: typeof parsed.loggedIn === "boolean" ? parsed.loggedIn : null,
+      account: text(parsed.email) ?? text(parsed.authMethod),
+      authMethod: text(parsed.authMethod),
+      org: text(parsed.orgName),
+      plan: text(parsed.subscriptionType),
+      loginExpiresAt: text(parsed.loginExpiresAt),
+    };
+  } catch {
+    return none;
+  }
 }
 
 /** Checks again (a few seconds), sharing a check already under way. */

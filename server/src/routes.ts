@@ -20,6 +20,7 @@ import { addProject, allProjects, getProject, listProjects, removeProject, touch
 import { promptDefinitions, renderPrompt, setPrompt } from "./prompts.js";
 import { closeOpenSessions, getSessionRow, hubUrl, listSessions, openSessionIds, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
 import { resumeOnStart, setResumeOnStart } from "./resume.js";
+import { createProfile, hubDefaultProfile, listProfiles, profileAuth, removeProfile, renameProfile, setHubDefaultProfile } from "./profiles.js";
 import { killTerminal, terminalForSession } from "./terminals.js";
 import { isPurpose, purposeNote, purposeTitle } from "./purposes.js";
 import { deleteSession, deletionPlan, setSessionTitle } from "./sessionFiles.js";
@@ -191,6 +192,20 @@ hubApi.get(
   ),
 );
 
+/** The Claude accounts sessions can run under, who each is signed in as, and the hub's default. */
+hubApi.get(
+  "/hub/profiles",
+  wrap(async (req) => {
+    const fresh = req.query.fresh === "1";
+    const profiles = await Promise.all(listProfiles().map(async (profile) => ({ ...profile, auth: await profileAuth(profile.id, fresh) })));
+    return { profiles, defaultId: hubDefaultProfile() };
+  }),
+);
+hubApi.post("/hub/profiles", wrap((req) => createProfile(req.body?.name)));
+hubApi.put("/hub/profiles/:id", wrap((req) => renameProfile(req.params.id, req.body?.name)));
+hubApi.delete("/hub/profiles/:id", wrap((req) => removeProfile(req.params.id)));
+hubApi.put("/hub/default-profile", wrap((req) => ({ defaultId: setHubDefaultProfile(String(req.body?.id ?? "")) })));
+
 /** Whether the sessions running when the hub stops are resumed when it starts. */
 hubApi.get("/hub/resume-on-start", wrap(() => ({ on: resumeOnStart() })));
 hubApi.put("/hub/resume-on-start", wrap((req) => ({ on: setResumeOnStart(req.body?.on !== false) })));
@@ -299,8 +314,17 @@ api.get(
 api.post(
   "/sessions",
   wrap((req) => {
-    const { prompt, category, name, permissionMode, cols, rows } = req.body ?? {};
-    const terminal = startSession({ prompt, category: category || null, name: name || undefined, permissionMode: permissionMode || undefined, origin: "manual", cols, rows });
+    const { prompt, category, name, permissionMode, profile, cols, rows } = req.body ?? {};
+    const terminal = startSession({
+      prompt,
+      category: category || null,
+      name: name || undefined,
+      permissionMode: permissionMode || undefined,
+      profile: typeof profile === "string" && profile ? profile : undefined,
+      origin: "manual",
+      cols,
+      rows,
+    });
     return { sessionId: terminal.sessionId, terminalId: terminal.id };
   }),
 );

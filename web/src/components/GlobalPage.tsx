@@ -1,10 +1,11 @@
-import { ArrowRight, Bell, BellOff, CalendarClock, RefreshCw, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, CalendarClock, Check, LogIn, Pencil, RefreshCw, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { compact, when } from "../lib/format";
 import { attempt, useLive, useStore, type Page } from "../lib/store";
-import type { GlobalProject } from "../lib/types";
+import type { AuthInfo, GlobalProject, Profile } from "../lib/types";
+import { useProfileList, useProfiles } from "../lib/profiles";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { usePersistentWidth } from "../lib/usePersistentWidth";
 import { ChannelsPage } from "./ChannelsPage";
@@ -17,6 +18,7 @@ import { SessionView } from "./SessionView";
 import { StatusDot } from "./Sidebar";
 import { Button } from "./ui/Button";
 import { Checkbox } from "./ui/Checkbox";
+import { Input } from "./ui/Input";
 import { Empty } from "./ui/Empty";
 import { ClaudeBanner } from "./ClaudeBanner";
 import { Tooltip } from "./ui/Tooltip";
@@ -283,6 +285,144 @@ function GlobalInbox() {
 
 const PLAN_LABEL: Record<string, string> = { pro: "Pro", max: "Max", team: "Team", enterprise: "Enterprise", free: "Free" };
 
+/** The organisation and plan an account belongs to, for beside its email. */
+function aboutOf(auth: AuthInfo | null): string {
+  const plan = auth?.plan ? (PLAN_LABEL[auth.plan] ?? auth.plan) : null;
+  return [auth?.org, plan && `${plan} plan`].filter(Boolean).join(" · ");
+}
+
+/** A name typed into a confirm dialog, read when it is confirmed. */
+function NameField({ holder, placeholder }: { holder: { value: string }; placeholder: string }) {
+  const [value, setValue] = useState(holder.value);
+  return (
+    <Input
+      autoFocus
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => {
+        setValue(event.target.value);
+        holder.value = event.target.value;
+      }}
+    />
+  );
+}
+
+/**
+ * The Claude accounts sessions run under. With one, just who it is; with more,
+ * each one, the hub's default checked (a click on another makes it the
+ * default), and per account: sign in, rename, remove. Adding one creates its
+ * folder and opens a session in it to sign in.
+ */
+function Accounts() {
+  const info = useProfileList();
+  const load = useProfiles((state) => state.load);
+  const go = useStore((state) => state.go);
+  const confirm = useConfirm();
+  if (!info) return <div>Checking...</div>;
+  const several = info.profiles.length > 1;
+
+  const signIn = async (profile: Profile) => {
+    const started = await attempt(() => api.startSession({ profile: profile.id, name: `Sign in: ${profile.name}` }));
+    if (!started) return;
+    await useStore.getState().refreshSessions();
+    go({ kind: "session", id: started.sessionId });
+    useStore.getState().notify("Sign in there with /login, then press the refresh icon.");
+  };
+  const add = () => {
+    const holder = { value: "" };
+    void confirm({
+      title: "Add a Claude account",
+      description: "It gets a Claude folder of its own; skills, agents, plugins and settings are shared with the default one.",
+      body: <NameField holder={holder} placeholder="Personal, Work, Client X..." />,
+      confirmLabel: "Add and sign in",
+      run: async () => {
+        const profile = await api.createProfile(holder.value);
+        await load(true);
+        await signIn({ ...profile, auth: null });
+      },
+    });
+  };
+  const rename = (profile: Profile) => {
+    const holder = { value: profile.name };
+    void confirm({
+      title: `Rename ${profile.name}`,
+      body: <NameField holder={holder} placeholder="Name" />,
+      confirmLabel: "Rename",
+      run: async () => {
+        await api.renameProfile(profile.id, holder.value);
+        await load();
+      },
+    });
+  };
+  const remove = (profile: Profile) =>
+    void confirm({
+      title: `Remove the account ${profile.name}?`,
+      description: "Its folder (sign-in and transcripts) stays on disk; sessions that ran under it can no longer be resumed from the hub.",
+      body: <code className="block break-all rounded bg-muted px-2 py-1 font-mono text-[11px]">{profile.configDir}</code>,
+      confirmLabel: "Remove",
+      tone: "destructive",
+      run: async () => {
+        await api.removeProfile(profile.id);
+        await load();
+      },
+    });
+  const makeDefault = async (profile: Profile) => {
+    if (profile.id === info.defaultId) return;
+    if (await attempt(() => api.setDefaultProfile(profile.id), `New sessions use ${profile.name} unless a project picks another.`)) await load();
+  };
+
+  return (
+    <div className="space-y-0.5">
+      {info.profiles.map((profile) => {
+        const about = aboutOf(profile.auth);
+        const isDefault = profile.id === info.defaultId;
+        const signedOut = profile.auth?.loggedIn === false;
+        const line = (
+          <span className="min-w-0 flex-1 truncate" title={[profile.auth?.account, about && `(${about})`].filter(Boolean).join(" ") || profile.configDir}>
+            {several && <span className="font-medium text-foreground">{profile.name} </span>}
+            {signedOut ? <span className="text-severity-warning">not signed in</span> : profile.auth?.account}
+            {about && !signedOut && <span className="text-muted-foreground/70">{` (${about})`}</span>}
+          </span>
+        );
+        if (!several) return <div key={profile.id} className="flex min-w-0 items-center">{line}</div>;
+        return (
+          <div key={profile.id} className={cn("group -mx-1 flex min-w-0 items-center gap-1 rounded px-1 py-0.5", isDefault ? "bg-muted/60" : "hover:bg-muted/40")}>
+            <button
+              onClick={() => void makeDefault(profile)}
+              title={isDefault ? "The hub's default account" : `Make ${profile.name} the hub's default`}
+              aria-label={isDefault ? "Default account" : `Make ${profile.name} the default`}
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            >
+              <span className={cn("grid h-3 w-3 shrink-0 place-items-center rounded-full border", isDefault ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50")}>
+                {isDefault && <Check size={8} strokeWidth={3} />}
+              </span>
+              {line}
+            </button>
+            <span className="hidden shrink-0 items-center group-hover:flex">
+              <button onClick={() => void signIn(profile)} title="Open a session under it (sign in with /login)" aria-label={`Sign in to ${profile.name}`} className="rounded p-0.5 hover:bg-muted hover:text-foreground">
+                <LogIn size={11} />
+              </button>
+              {!profile.builtIn && (
+                <>
+                  <button onClick={() => rename(profile)} title="Rename" aria-label={`Rename ${profile.name}`} className="rounded p-0.5 hover:bg-muted hover:text-foreground">
+                    <Pencil size={11} />
+                  </button>
+                  <button onClick={() => remove(profile)} title="Remove from the hub" aria-label={`Remove ${profile.name}`} className="rounded p-0.5 hover:bg-muted hover:text-foreground">
+                    <Trash2 size={11} />
+                  </button>
+                </>
+              )}
+            </span>
+          </div>
+        );
+      })}
+      <button onClick={add} className="flex items-center gap-1 rounded py-0.5 text-[11px] hover:text-foreground" title="Another Claude account, signed in separately">
+        <Plus size={11} /> Add account
+      </button>
+    </div>
+  );
+}
+
 /**
  * Claude Code as this machine runs it, at the foot of the global sidebar: who
  * is signed in and on what plan, until when, which version, and how much the
@@ -293,17 +433,15 @@ function ClaudeInfo() {
   const overview = useLive(() => api.globalOverview(), ["sessions", "projects"]);
   const [checking, setChecking] = useState(false);
   const status = hub.data?.claudeStatus ?? null;
+  const loadProfiles = useProfiles((state) => state.load);
   const recheck = async () => {
     setChecking(true);
-    await attempt(() => api.checkClaude());
+    await Promise.all([attempt(() => api.checkClaude()), loadProfiles(true)]);
     setChecking(false);
     hub.reload();
   };
   const tokens = (overview.data ?? []).reduce((total, project) => total + project.tokensToday, 0);
   const active = (overview.data ?? []).reduce((total, project) => total + project.activeToday, 0);
-  const expires = status?.loginExpiresAt ? Date.parse(status.loginExpiresAt) : null;
-  const daysLeft = expires ? Math.ceil((expires - Date.now()) / 86_400_000) : null;
-  const plan = status?.plan ? (PLAN_LABEL[status.plan] ?? status.plan) : null;
   const signedIn = status?.loggedIn !== false && !status?.problem;
 
   return (
@@ -324,23 +462,7 @@ function ClaudeInfo() {
           {status.fix && <code className="mt-0.5 block font-mono text-foreground">{status.fix}</code>}
         </div>
       ) : (
-        <>
-          {status.account && (
-            <div className="truncate" title={status.account}>
-              {status.account}
-            </div>
-          )}
-          {(status.org || plan) && (
-            <div className="truncate" title={[status.org, plan && `${plan} plan`].filter(Boolean).join(" · ")}>
-              {[status.org, plan && `${plan} plan`].filter(Boolean).join(" · ")}
-            </div>
-          )}
-          {daysLeft !== null && (
-            <div className={cn(daysLeft <= 7 && "text-severity-warning")} title={`Sign-in expires ${when(status.loginExpiresAt!)}; claude auth login renews it.`}>
-              {daysLeft <= 0 ? "Sign-in expired: run claude auth login" : `Sign-in valid ${daysLeft} more day${daysLeft > 1 ? "s" : ""}`}
-            </div>
-          )}
-        </>
+        <Accounts />
       )}
       {overview.data && (
         <div title="Sent and written by the hub's sessions active today, cache reads left out">
@@ -392,7 +514,7 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
 
   return (
     <aside className="flex shrink-0 flex-col" style={{ width }}>
-      <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+      <div className="flex items-start gap-2 px-3 pb-2 pt-3">
         <LogoLink />
         <div className="min-w-0">
           <TitleLink />
@@ -400,7 +522,7 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
             <span className="truncate text-[11px] text-muted-foreground">Global</span>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="ml-auto" onClick={onToggle} aria-label={drawer ? "Close menu" : "Collapse sidebar"}>
+        <Button variant="ghost" size="icon" className="ml-auto self-center" onClick={onToggle} aria-label={drawer ? "Close menu" : "Collapse sidebar"}>
           {drawer ? <X size={15} /> : <ChevronsLeft size={15} />}
         </Button>
       </div>
@@ -425,6 +547,14 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
 
         <div className="mt-2 px-2">
           <div className="px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Projects</div>
+          <button
+            onClick={() => setPicking(true)}
+            title="Open a folder as a project"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            <Plus size={14} className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate">Add project...</span>
+          </button>
           {menu && <ProjectMenu project={menu.project} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
           {(projects.data ?? []).map((project) => (
             <button
@@ -450,14 +580,6 @@ function GlobalSidebar({ width, collapsed, onToggle, drawer = false }: { width: 
               )}
             </button>
           ))}
-          <button
-            onClick={() => setPicking(true)}
-            title="Open a folder as a project"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-          >
-            <Plus size={14} className="shrink-0" />
-            <span className="min-w-0 flex-1 truncate">Add project...</span>
-          </button>
           <OpenFolderDialog open={picking} onOpenChange={setPicking} />
         </div>
 

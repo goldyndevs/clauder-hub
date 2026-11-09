@@ -28,6 +28,8 @@ import type {
   Suggestion,
   Toolset,
   Variable,
+  Profile,
+  ProfilesInfo,
 } from "./types";
 import { projectApi } from "./project";
 
@@ -74,6 +76,11 @@ export const api = {
   hub: () => hubRequest<{ version: string; claudeStatus: ClaudeStatus | null }>("/hub"),
   /** Claude Code looked at again, after installing it or signing in. */
   checkClaude: () => hubRequest<ClaudeStatus>("/claude/check", { method: "POST" }),
+  profiles: (fresh = false) => hubRequest<ProfilesInfo>(`/hub/profiles${fresh ? "?fresh=1" : ""}`),
+  createProfile: (name: string) => hubRequest<Profile>("/hub/profiles", { method: "POST", body: JSON.stringify({ name }) }),
+  renameProfile: (id: string, name: string) => hubRequest<Profile>(`/hub/profiles/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name }) }),
+  removeProfile: (id: string) => hubRequest<{ folder: string }>(`/hub/profiles/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  setDefaultProfile: (id: string) => hubRequest<{ defaultId: string }>("/hub/default-profile", { method: "PUT", body: JSON.stringify({ id }) }),
   resumeOnStart: () => hubRequest<{ on: boolean }>("/hub/resume-on-start"),
   setResumeOnStart: (on: boolean) => hubRequest<{ on: boolean }>("/hub/resume-on-start", { method: "PUT", body: JSON.stringify({ on }) }),
   projects: () => hubRequest<ProjectInfo[]>("/projects"),
@@ -107,7 +114,7 @@ export const api = {
   /** Another project's sessions, read before switching to it. */
   sessionsIn: (projectId: string) => call<Session[]>(`/api/p/${encodeURIComponent(projectId)}/sessions`),
   session: (id: string) => request<SessionDetail>(`/sessions/${id}`),
-  startSession: (body: { prompt?: string; category?: string; name?: string; permissionMode?: string } & TerminalSize) =>
+  startSession: (body: { prompt?: string; category?: string; name?: string; permissionMode?: string; profile?: string } & TerminalSize) =>
     post<{ sessionId: string; terminalId: string }>("/sessions", body),
   /** Opens a Claude session for one configuration task; a form hands over what it had as the draft. */
   startPurpose: (kind: PurposeKind, targetId?: string, size: TerminalSize = {}, draft?: Record<string, unknown>) =>

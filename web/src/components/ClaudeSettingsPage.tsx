@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { useProfileList } from "../lib/profiles";
 import { attempt, useLive } from "../lib/store";
 import type { ClaudeSettings } from "../lib/types";
 import { Section } from "./Charts";
@@ -50,6 +51,8 @@ export function ClaudeSettingsPage() {
     if (saved) setSettings(saved);
   };
 
+  const accounts = useProfileList();
+  const hubDefault = accounts?.profiles.find((profile) => profile.id === accounts.defaultId);
   const modes = live.data?.permissionModes ?? [];
   const efforts = live.data?.efforts ?? [];
 
@@ -59,6 +62,23 @@ export function ClaudeSettingsPage() {
         <PageHeader group="Settings" title="Claude settings" description="How the hub starts claude. Applies to sessions started from now on; empty keeps your own Claude Code setting." />
         {settings && (
           <>
+            {accounts && accounts.profiles.length > 1 && (
+              <Section title="Account" description="The Claude account this project's new sessions run under. A resumed session keeps its own.">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Account" hint="Accounts are added and the hub's default is picked at the foot of the Global page.">
+                    <Select value={settings.account} onValueChange={(account) => void save({ account })}>
+                      <SelectItem value={OWN}>The hub's default{hubDefault ? ` (${hubDefault.name})` : ""}</SelectItem>
+                      {accounts.profiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>
+                          {profile.name}
+                          {profile.auth?.account ? ` · ${profile.auth.account}` : ""}
+                        </SelectItem>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </Section>
+            )}
             <Section title="Permissions" description="Which mode a session starts in.">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Sessions you open" hint="New session, resumes and hub tasks.">

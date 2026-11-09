@@ -57,6 +57,17 @@ channels (Slack, Telegram, webhooks) that relay what sessions ask.
   Code writes. The format is private: read every field defensively, and
   dedupe usage by `message.id` (one line per content block repeats it) and a
   fork's inherited lines against its parent.
+- **Several Claude accounts.** `profiles.ts`: an account is a Claude config
+  folder (`CLAUDE_CONFIG_DIR`); "default" is `~/.claude`, the others live in
+  `~/.clauder-hub/profiles/<id>` with skills, agents, commands, rules, output
+  styles and plugins as junctions to the default folder's, `CLAUDE.md` hard
+  linked, and the default `settings.json` merged into each session's
+  `--settings`. A new session runs under the account picked for it, else the
+  project's (Claude settings `account`), else the hub's default (Global page);
+  a resume runs under the account whose folder holds its transcript
+  (`paths.ts` `transcriptFile`, which looks in every account's folder, as do
+  the transcript list and watcher). The pages that read `~/.claude`
+  (inventory, Variables) read the default account's.
 - **A restart picks up where it stopped.** Stopping the hub kills its
   terminals with `stopping` set, so their sessions stay marked live; at the
   next start (`resume.ts`, before `recoverRuns`) those, and any a crash left,

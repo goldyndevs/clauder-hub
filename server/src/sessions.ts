@@ -14,6 +14,7 @@ import { sessionDiskBytes } from "./sessionFiles.js";
 import { allTerminals, killTerminal, listTerminals, spawnTerminal, terminalForSession, waitForExit, type Terminal } from "./terminals.js";
 import { defaultToolset, normaliseToolset, toolsetSettings, type Toolset } from "./toolset.js";
 import { purposeSystemPrompt, purposeTitle, type Purpose } from "./purposes.js";
+import { getProfile, profileEnv, profileOfSession, projectProfile, sharedSettings } from "./profiles.js";
 import { listTranscripts, type TranscriptSummary } from "./transcripts.js";
 
 export type Origin = "manual" | "cron" | "webhook" | "queue";
@@ -30,6 +31,8 @@ export interface SessionRow {
   toolset: string | null;
   purpose: string | null;
   setup: string | null;
+  /** The Claude account it last started under (profiles.ts). */
+  profile: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -173,8 +176,23 @@ export interface StartOptions {
   purpose?: Purpose;
   /** What is turned off. Omitted: what the session had last time, else the default preset. */
   toolset?: Toolset;
+  /** The Claude account to start under. Omitted: a resumed session's own, else the project's, else the hub's default. */
+  profile?: string;
   cols?: number;
   rows?: number;
+}
+
+/** Two settings objects as one: objects merged key by key, lists joined, the second's plain values winning. */
+function mergeSettings(base: Record<string, unknown>, over: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(over)) {
+    const before = out[key];
+    if (Array.isArray(before) && Array.isArray(value)) out[key] = [...before, ...value];
+    else if (before && value && typeof before === "object" && typeof value === "object" && !Array.isArray(before) && !Array.isArray(value)) {
+      out[key] = mergeSettings(before as Record<string, unknown>, value as Record<string, unknown>);
+    } else out[key] = value;
+  }
+  return out;
 }
 
 export function startSession(options: StartOptions): Terminal {
@@ -190,10 +208,15 @@ export function startSession(options: StartOptions): Terminal {
   const token = nanoid(24);
   const toolset = options.toolset ? normaliseToolset(options.toolset) : existing?.toolset ? normaliseToolset(JSON.parse(existing.toolset)) : defaultToolset();
 
+  // A resumed conversation lives in one account's folder and can only be resumed there.
+  const requested = options.profile && getProfile(options.profile) ? options.profile : null;
+  const profile = (options.resumeId ? profileOfSession(options.resumeId) : null) ?? requested ?? (existing?.profile && getProfile(existing.profile) ? existing.profile : null) ?? projectProfile();
+
   const settingsFile = path.join(runDir, `${token}.settings.json`);
   const promptFile = path.join(runDir, `${token}.prompt.md`);
-  // Hooks and toolset share one --settings file; their keys never overlap.
-  fs.writeFileSync(settingsFile, JSON.stringify({ ...toolsetSettings(toolset), ...hookSettings(token) }, null, 2), "utf8");
+  // Hooks and toolset share one --settings file; their keys never overlap. Another account's
+  // sessions also take the default folder's settings.json as their base, so it is shared.
+  fs.writeFileSync(settingsFile, JSON.stringify(mergeSettings(sharedSettings(profile), { ...toolsetSettings(toolset), ...hookSettings(token) }), null, 2), "utf8");
   const purpose = options.purpose ?? (existing?.purpose ? (JSON.parse(existing.purpose) as Purpose) : null);
   fs.writeFileSync(promptFile, systemPromptFor(category, purpose, existing ? sessionSetup(sessionId) : null), "utf8");
 
@@ -217,13 +240,13 @@ export function startSession(options: StartOptions): Terminal {
 
   const stamp = now();
   db.prepare(
-    `INSERT INTO sessions (id, origin, run_id, category, toolset, purpose, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)
+    `INSERT INTO sessions (id, origin, run_id, category, toolset, purpose, profile, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)
      ON CONFLICT(id) DO UPDATE SET status = 'running', category = excluded.category, toolset = excluded.toolset, purpose = excluded.purpose,
-       run_id = COALESCE(excluded.run_id, sessions.run_id), updated_at = excluded.updated_at`,
-  ).run(sessionId, existing?.origin ?? options.origin ?? "manual", options.runId ?? null, category, JSON.stringify(toolset), purpose ? JSON.stringify(purpose) : null, stamp, stamp);
+       profile = excluded.profile, run_id = COALESCE(excluded.run_id, sessions.run_id), updated_at = excluded.updated_at`,
+  ).run(sessionId, existing?.origin ?? options.origin ?? "manual", options.runId ?? null, category, JSON.stringify(toolset), purpose ? JSON.stringify(purpose) : null, profile, stamp, stamp);
 
   openSessionsAdd(sessionId);
-  return spawnTerminal({ file: claude, args, sessionId, token, cols: options.cols, rows: options.rows });
+  return spawnTerminal({ file: claude, args, sessionId, token, cols: options.cols, rows: options.rows, env: profileEnv(profile) });
 }
 
 /**
@@ -314,6 +337,8 @@ export interface SessionView extends Partial<TranscriptSummary> {
   diskBytes: number | null;
   /** Do not disturb: nothing of it goes out on a channel. */
   quiet: boolean;
+  /** The Claude account it runs under: where its transcript is, else what it was started with. */
+  profile: string | null;
 }
 
 function purposeOf(row: SessionRow | undefined): SessionView["purpose"] {
@@ -368,6 +393,7 @@ export function listSessions(): SessionView[] {
       purpose,
       diskBytes: sessionDiskBytes(id),
       quiet: quiet.has(id),
+      profile: profileOfSession(id) ?? row?.profile ?? null,
     };
   };
 

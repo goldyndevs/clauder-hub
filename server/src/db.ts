@@ -195,6 +195,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status, created_at);
   ensureColumn("sessions", "purpose", "TEXT");
   // What the person set up for one session (Setup tab): notes and named values for its system prompt, as JSON.
   ensureColumn("sessions", "setup", "TEXT");
+  ensureColumn("sessions", "profile", "TEXT");
   // In the global context, which project a channel message or thread belongs to; null in a project's own.
   ensureColumn("channel_refs", "project_id", "TEXT");
   ensureColumn("channel_threads", "project_id", "TEXT");

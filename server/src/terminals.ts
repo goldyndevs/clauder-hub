@@ -78,7 +78,7 @@ function childEnv(): Record<string, string> {
   return { ...env, CLAUDER_HUB: "1", FORCE_COLOR: "1" };
 }
 
-export function spawnTerminal(input: { file: string; args: string[]; sessionId: string; token?: string; cols?: number; rows?: number }): Terminal {
+export function spawnTerminal(input: { file: string; args: string[]; sessionId: string; token?: string; cols?: number; rows?: number; env?: Record<string, string> }): Terminal {
   const cols = input.cols ?? 120;
   const rows = input.rows ?? 32;
   const child = pty.spawn(input.file, input.args, {
@@ -86,7 +86,7 @@ export function spawnTerminal(input: { file: string; args: string[]; sessionId: 
     cols,
     rows,
     cwd: projectRoot(),
-    env: childEnv(),
+    env: { ...childEnv(), ...(input.env ?? {}) },
   });
   const terminal: Terminal = {
     id: nanoid(10),

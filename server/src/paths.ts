@@ -13,9 +13,31 @@ export function projectRoot(): string {
   return currentProject().root;
 }
 
-/** Where the current project's session transcripts live. */
+/** Where the current project's session transcripts live, in the default Claude folder. */
 export function transcriptsDir(): string {
   return currentProject().transcriptsDir;
+}
+
+/** The other accounts' Claude folders (profiles.ts registers them; paths.ts cannot import it). */
+let extraConfigDirs: () => string[] = () => [];
+export function setExtraConfigDirs(read: () => string[]): void {
+  extraConfigDirs = read;
+}
+
+/** The current project's transcript folder in every account's Claude folder, the default's first. */
+export function transcriptsDirs(): string[] {
+  const own = transcriptsDir();
+  const slug = path.basename(own);
+  return [own, ...extraConfigDirs().map((dir) => path.join(dir, "projects", slug))];
+}
+
+/** A session's transcript, in whichever account's folder it was written; the default folder's path when none has it yet. */
+export function transcriptFile(id: string): string {
+  for (const dir of transcriptsDirs()) {
+    const file = path.join(dir, `${id}.jsonl`);
+    if (fs.existsSync(file)) return file;
+  }
+  return path.join(transcriptsDir(), `${id}.jsonl`);
 }
 
 export const toolVersion: string = (() => {

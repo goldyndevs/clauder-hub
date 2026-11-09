@@ -47,6 +47,32 @@ export interface Session {
   diskBytes?: number | null;
   /** Do not disturb: nothing of it goes out on a channel. */
   quiet?: boolean;
+  /** The Claude account it runs under. */
+  profile?: string | null;
+}
+
+/** Who a Claude config folder is signed in as, from `claude auth status`. */
+export interface AuthInfo {
+  loggedIn: boolean | null;
+  account: string | null;
+  authMethod: string | null;
+  org: string | null;
+  plan: string | null;
+  loginExpiresAt: string | null;
+}
+
+/** A Claude account: its own config folder; "default" is ~/.claude. */
+export interface Profile {
+  id: string;
+  name: string;
+  configDir: string;
+  builtIn: boolean;
+  auth: AuthInfo | null;
+}
+
+export interface ProfilesInfo {
+  profiles: Profile[];
+  defaultId: string;
 }
 
 export interface Subagent {
@@ -385,6 +411,8 @@ export interface ClaudeSettings {
   effort: string;
   addDirs: string[];
   chrome: string;
+  /** The Claude account new sessions of the project use; "" for the hub's default. */
+  account: string;
 }
 
 export interface Preset {
