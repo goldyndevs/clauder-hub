@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { findClaudeCode } from "./claudeCode.js";
 import { hubHome } from "./paths.js";
-import { getProfile, listProfiles, profileEnv } from "./profiles.js";
+import { getProfile, listProfiles, profileAuth, profileEnv } from "./profiles.js";
 import { childEnv } from "./terminals.js";
 
 /**
@@ -30,6 +30,9 @@ export interface UsageReading {
   items: UsageItem[];
   error: string | null;
 }
+
+/** What Claude Code shows before its prompt when the account has never been set up or signed in. */
+const FIRST_RUN = ["choosethetextstyle", "selectloginmethod", "let'sgetstarted", "pleaserun/login", "notloggedin", "invalidapikey"];
 
 const COLS = 120;
 const ROWS = 80;
@@ -99,8 +102,13 @@ async function probe(profileId: string): Promise<UsageReading> {
         }
         return false;
       }
+      // A first run's theme picker or a sign-in screen has a ❯ too, but no prompt behind it.
+      if (FIRST_RUN.some((marker) => flat.includes(marker))) return true;
       return flat.includes("❯");
     }, 25_000);
+    if (FIRST_RUN.some((marker) => squeeze(screenText(screen).join("\n")).includes(marker))) {
+      return { profileId, at, items: [], error: "Not signed in: open a session under this account and sign in." };
+    }
     if (!ready) {
       const flat = squeeze(screenText(screen).join("\n"));
       if (flat.includes("login") || flat.includes("signin")) return { profileId, at, items: [], error: "Not signed in." };
@@ -138,7 +146,10 @@ export async function usageOf(profileId: string, fresh = false): Promise<UsageRe
   if (!fresh && known && Date.now() - Date.parse(known.at) < FRESH_MS) return known;
   let pending = running.get(profileId);
   if (!pending) {
-    pending = probe(profileId)
+    pending = profileAuth(profileId)
+      .then((auth) =>
+        auth?.loggedIn === false ? { profileId, at: new Date().toISOString(), items: [], error: "Not signed in: open a session under this account and sign in." } : probe(profileId),
+      )
       .then((reading) => {
         readings.set(profileId, reading);
         return reading;

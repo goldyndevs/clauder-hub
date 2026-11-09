@@ -21,7 +21,7 @@ import { promptDefinitions, renderPrompt, setPrompt } from "./prompts.js";
 import { closeOpenSessions, getSessionRow, hubUrl, listSessions, openSessionIds, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
 import { resumeOnStart, setResumeOnStart } from "./resume.js";
 import { hubSettings, saveHubSettings } from "./hubSettings.js";
-import { usageOfAll } from "./usage.js";
+import { usageOf, usageOfAll } from "./usage.js";
 import { createProfile, hubDefaultProfile, listProfiles, profileAuth, removeProfile, renameProfile, setHubDefaultProfile } from "./profiles.js";
 import { killTerminal, terminalForSession } from "./terminals.js";
 import { isPurpose, purposeNote, purposeTitle } from "./purposes.js";
@@ -210,6 +210,7 @@ hubApi.put("/hub/default-profile", wrap((req) => ({ defaultId: setHubDefaultProf
 
 /** How much of each account's plan is used, read from Claude Code's /usage. */
 hubApi.get("/hub/usage", wrap((req) => usageOfAll(req.query.fresh === "1")));
+hubApi.get("/hub/usage/:id", wrap((req) => usageOf(req.params.id, req.query.fresh === "1")));
 
 /** The hub's own preferences: the global Settings page. */
 hubApi.get("/hub/settings", wrap(() => hubSettings()));

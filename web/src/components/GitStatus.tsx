@@ -1,6 +1,5 @@
-import { ArrowDown, ArrowUp, GitBranch, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowUp, GitBranch } from "lucide-react";
 import { useEffect } from "react";
-import { cn } from "../lib/cn";
 import { ago } from "../lib/format";
 import { projectApi } from "../lib/project";
 import { useLive } from "../lib/store";
@@ -42,7 +41,6 @@ export function GitStatus() {
 
   const info = git.data;
   if (!info) return null;
-  const changes = info.staged + info.changed + info.untracked;
   const title = [
     info.branch ? `Branch ${info.branch}` : "No branch",
     info.ahead !== null ? `${info.ahead} to push, ${info.behind} to pull` : "No upstream",
@@ -74,8 +72,6 @@ export function GitStatus() {
       ) : null}
       <span className="flex-1" />
       {info.conflicted > 0 && <span className="shrink-0 tabular-nums text-destructive">{info.conflicted} conflict{info.conflicted > 1 ? "s" : ""}</span>}
-      <span className={cn("shrink-0 tabular-nums", changes ? "text-severity-warning" : "")}>{changes ? `${changes} changed` : "clean"}</span>
-      <RefreshCw size={10} className="hidden shrink-0 group-hover:block" />
     </button>
   );
 }

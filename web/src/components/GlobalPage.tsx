@@ -343,7 +343,7 @@ function aboutOf(auth: AuthInfo | null): string {
 
 /** An account's plan usage as /usage shows it: a thin bar per limit, amber from 80%, red from 95%. */
 function UsageBars({ reading, loading }: { reading: UsageReading | undefined; loading: boolean }) {
-  if (!reading) return loading ? <div className="pl-0.5 text-[10px] text-muted-foreground/70">Reading usage...</div> : null;
+  if (!reading) return loading ? <div className="pl-0.5 text-[10px] text-muted-foreground/70">Reading usage (a few seconds)...</div> : null;
   if (reading.error) return <div className="truncate pl-0.5 text-[10px] text-muted-foreground/70" title={reading.error}>Usage: {reading.error}</div>;
   return (
     <div className="space-y-0.5 py-0.5" title={`Read from /usage ${new Date(reading.at).toLocaleTimeString()}`}>
@@ -388,9 +388,9 @@ function NameField({ holder, placeholder }: { holder: { value: string }; placeho
 function Accounts() {
   const info = useProfileList();
   const load = useProfiles((state) => state.load);
-  const usage = useUsage((state) => state.data);
-  const usageLoading = useUsage((state) => state.loading);
-  const readingOf = (id: string) => usage?.find((item) => item.profileId === id);
+  const readings = useUsage((state) => state.readings);
+  const pending = useUsage((state) => state.pending);
+  const readingOf = (id: string) => readings[id];
   const go = useStore((state) => state.go);
   const confirm = useConfirm();
   if (!info) return <div>Checking...</div>;
@@ -463,7 +463,7 @@ function Accounts() {
           return (
             <div key={profile.id}>
               <div className="flex min-w-0 items-center">{line}</div>
-              {!signedOut && <UsageBars reading={readingOf(profile.id)} loading={usageLoading} />}
+              {!signedOut && <UsageBars reading={readingOf(profile.id)} loading={Boolean(pending[profile.id])} />}
             </div>
           );
         return (
@@ -498,7 +498,7 @@ function Accounts() {
           </div>
           {!signedOut && (
             <div className="pl-[18px]">
-              <UsageBars reading={readingOf(profile.id)} loading={usageLoading} />
+              <UsageBars reading={readingOf(profile.id)} loading={Boolean(pending[profile.id])} />
             </div>
           )}
           </div>
@@ -526,20 +526,26 @@ function ClaudeInfo() {
   const status = hub.data?.claudeStatus ?? null;
   const loadProfiles = useProfiles((state) => state.load);
   const loadUsage = useUsage((state) => state.load);
+  const accounts = useProfileList();
+  const accountIds = (accounts?.profiles ?? []).filter((profile) => profile.auth?.loggedIn !== false).map((profile) => profile.id);
+  const idsKey = accountIds.join(",");
   const recheck = async () => {
     setChecking(true);
-    // Usage takes a few seconds per account: it fills in after the rest.
-    void loadUsage(true);
     await Promise.all([attempt(() => api.checkClaude()), loadProfiles(true)]);
     setChecking(false);
     hub.reload();
+    // Usage takes a few seconds per account, each filling in when it is read.
+    const fresh = useProfiles.getState().data;
+    void loadUsage((fresh?.profiles ?? []).filter((profile) => profile.auth?.loggedIn !== false).map((profile) => profile.id), true);
   };
-  // The usage again every 15 minutes while the page is open; the hub keeps a reading 10.
+  // Every signed-in account's usage once known, and again every 15 minutes while the page is open.
   useEffect(() => {
-    void loadUsage();
-    const timer = window.setInterval(() => document.visibilityState === "visible" && void loadUsage(true), 15 * 60_000);
+    if (!idsKey) return;
+    const ids = idsKey.split(",");
+    void loadUsage(ids);
+    const timer = window.setInterval(() => document.visibilityState === "visible" && void loadUsage(ids, true), 15 * 60_000);
     return () => window.clearInterval(timer);
-  }, [loadUsage]);
+  }, [idsKey, loadUsage]);
   // Asked again once per page load, as if the refresh icon were pressed: a sign-in may have changed meanwhile.
   useEffect(() => {
     if (checkedThisLoad) return;

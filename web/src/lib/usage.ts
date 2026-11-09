@@ -14,20 +14,34 @@ export interface UsageReading {
   error: string | null;
 }
 
-/** Each account's plan usage, read from Claude Code's /usage by the hub; a few seconds per account. */
-export const useUsage = create<{ data: UsageReading[] | null; loading: boolean; load: (fresh?: boolean) => Promise<void> }>((set, get) => ({
-  data: null,
-  loading: false,
-  load: async (fresh = false) => {
-    if (get().loading) return;
-    set({ loading: true });
-    try {
-      set({ data: await api.usage(fresh) });
-    } catch {
-      // An older hub, or Claude Code not there: the bars just do not show.
-    } finally {
-      set({ loading: false });
-    }
+/**
+ * Each account's plan usage, read from Claude Code's /usage by the hub. The
+ * accounts are asked side by side and each shows as soon as it answers, so a
+ * slow or signed-out one never holds the others back.
+ */
+export const useUsage = create<{
+  readings: Record<string, UsageReading>;
+  pending: Record<string, boolean>;
+  load: (profileIds: string[], fresh?: boolean) => Promise<void>;
+}>((set, get) => ({
+  readings: {},
+  pending: {},
+  load: async (profileIds, fresh = false) => {
+    await Promise.all(
+      profileIds
+        .filter((id) => !get().pending[id])
+        .map(async (id) => {
+          set((state) => ({ pending: { ...state.pending, [id]: true } }));
+          try {
+            const reading = await api.usageOf(id, fresh);
+            set((state) => ({ readings: { ...state.readings, [id]: reading } }));
+          } catch (error) {
+            set((state) => ({ readings: { ...state.readings, [id]: { profileId: id, at: new Date().toISOString(), items: [], error: (error as Error).message } } }));
+          } finally {
+            set((state) => ({ pending: { ...state.pending, [id]: false } }));
+          }
+        }),
+    );
   },
 }));
 
