@@ -105,7 +105,8 @@ async function probe(profileId: string): Promise<UsageReading> {
       }
       // A first run's theme picker or a sign-in screen has a ❯ too, but no prompt behind it.
       if (FIRST_RUN.some((marker) => flat.includes(marker))) return true;
-      return flat.includes("❯");
+      // ❯ with a TERM set (childEnv does); ">" is Claude Code's ASCII fallback without one.
+      return flat.includes("❯") || lines.some((line) => /^\s*>\s/.test(line));
     }, 60_000);
     if (FIRST_RUN.some((marker) => squeeze(screenText(screen).join("\n")).includes(marker))) {
       return { profileId, at, items: [], error: "Not signed in: open a session under this account and sign in." };

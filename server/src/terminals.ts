@@ -75,7 +75,9 @@ export function childEnv(): Record<string, string> {
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && !INHERITED_MARKERS.includes(key)) env[key] = value;
   }
-  return { ...env, CLAUDER_HUB: "1", FORCE_COLOR: "1" };
+  // The page draws every pty with xterm.js. Started from PowerShell there is no TERM, and Claude Code
+  // then falls back to ASCII (">" for its prompt and selection), which the screen readers here do not expect.
+  return { ...env, TERM: env.TERM || "xterm-256color", CLAUDER_HUB: "1", FORCE_COLOR: "1" };
 }
 
 export function spawnTerminal(input: { file: string; args: string[]; sessionId: string; token?: string; cols?: number; rows?: number; env?: Record<string, string> }): Terminal {
