@@ -91,6 +91,7 @@ async function probe(profileId: string): Promise<UsageReading> {
     // Ready: the prompt shows. A trust dialog for the hub's own folder is answered yes: the selection
     // (the line with ❯) is moved onto "Yes, I trust" and confirmed, whatever order this version lists them in.
     let trusted = 0;
+    // Up to a minute: right after the hub starts it may be resuming a dozen sessions, all starting Claude Code at once.
     const ready = await until((flat, lines) => {
       if (flat.includes("yes,itrust")) {
         if (trusted < 6) {
@@ -105,7 +106,7 @@ async function probe(profileId: string): Promise<UsageReading> {
       // A first run's theme picker or a sign-in screen has a ❯ too, but no prompt behind it.
       if (FIRST_RUN.some((marker) => flat.includes(marker))) return true;
       return flat.includes("❯");
-    }, 25_000);
+    }, 60_000);
     if (FIRST_RUN.some((marker) => squeeze(screenText(screen).join("\n")).includes(marker))) {
       return { profileId, at, items: [], error: "Not signed in: open a session under this account and sign in." };
     }
@@ -137,18 +138,26 @@ async function probe(profileId: string): Promise<UsageReading> {
 
 const readings = new Map<string, UsageReading>();
 const running = new Map<string, Promise<UsageReading>>();
-/** A reading this recent is shown as it is, unless asked again. */
+/** A reading this recent is shown as it is, unless asked again; a failed one is tried again soon. */
 const FRESH_MS = 10 * 60_000;
+const FAILED_MS = 30_000;
+
+/** A reading that never reached the prompt is tried once more: a busy start, not a broken account. */
+async function probeWithRetry(profileId: string): Promise<UsageReading> {
+  const first = await probe(profileId);
+  if (!first.error || !/did not get to its prompt|exited before/.test(first.error)) return first;
+  return probe(profileId);
+}
 
 export async function usageOf(profileId: string, fresh = false): Promise<UsageReading> {
   if (!getProfile(profileId)) throw new Error("No such account.");
   const known = readings.get(profileId);
-  if (!fresh && known && Date.now() - Date.parse(known.at) < FRESH_MS) return known;
+  if (!fresh && known && Date.now() - Date.parse(known.at) < (known.error ? FAILED_MS : FRESH_MS)) return known;
   let pending = running.get(profileId);
   if (!pending) {
     pending = profileAuth(profileId)
       .then((auth) =>
-        auth?.loggedIn === false ? { profileId, at: new Date().toISOString(), items: [], error: "Not signed in: open a session under this account and sign in." } : probe(profileId),
+        auth?.loggedIn === false ? { profileId, at: new Date().toISOString(), items: [], error: "Not signed in: open a session under this account and sign in." } : probeWithRetry(profileId),
       )
       .then((reading) => {
         readings.set(profileId, reading);
