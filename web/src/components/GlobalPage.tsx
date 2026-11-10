@@ -1,4 +1,4 @@
-import { ArrowRight, Bell, BellOff, CalendarClock, Check, Settings, LogIn, Pencil, RefreshCw, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
+import { ArrowRight, BarChart3, Bell, BellOff, CalendarClock, Check, Settings, LogIn, Pencil, RefreshCw, ChevronsLeft, ChevronsRight, FolderGit2, FolderOpen, Inbox, LayoutGrid, Link, ListOrdered, Menu, Plus, Radio, Trash2, VolumeX, Wrench, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -6,7 +6,7 @@ import { compact, when } from "../lib/format";
 import { attempt, useLive, useStore, type Page } from "../lib/store";
 import type { AuthInfo, GlobalProject, Profile } from "../lib/types";
 import { useProfileList, useProfiles } from "../lib/profiles";
-import { shortLabel, useUsage, type UsageReading } from "../lib/usage";
+import { mainLimits, shortLabel, useUsage, useUsageHidden, type UsageReading } from "../lib/usage";
 import { useHubSettings, useHubSettingsData, type HubSettings } from "../lib/hubSettings";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { usePersistentWidth } from "../lib/usePersistentWidth";
@@ -348,7 +348,7 @@ function UsageBars({ reading, loading }: { reading: UsageReading | undefined; lo
   if (reading.error) return <div className="truncate pl-0.5 text-[10px] text-muted-foreground/70" title={reading.error}>Usage: {reading.error}</div>;
   return (
     <div className="space-y-0.5 py-0.5" title={`Read from /usage ${new Date(reading.at).toLocaleTimeString()}`}>
-      {reading.items.map((item) => (
+      {mainLimits(reading.items).map((item) => (
         <div key={item.label} className="flex items-center gap-1.5 text-[10px]" title={`${item.label}: ${item.percent}% used${item.detail ? `, ${item.detail}` : ""}`}>
           <span className="w-16 shrink-0 truncate">{shortLabel(item.label)}</span>
           <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
@@ -392,6 +392,22 @@ function Accounts() {
   const readings = useUsage((state) => state.readings);
   const pending = useUsage((state) => state.pending);
   const readingOf = (id: string) => readings[id];
+  const hiddenUsage = useUsageHidden((state) => state.ids);
+  const toggleUsage = useUsageHidden((state) => state.toggle);
+  const usageToggle = (profile: Profile) => {
+    const hidden = hiddenUsage.includes(profile.id);
+    return (
+      <button
+        onClick={() => toggleUsage(profile.id)}
+        title={hidden ? "Show its usage" : "Hide its usage (and stop reading it)"}
+        aria-label={hidden ? `Show the usage of ${profile.name}` : `Hide the usage of ${profile.name}`}
+        aria-pressed={!hidden}
+        className={cn("rounded p-0.5 hover:bg-muted hover:text-foreground", hidden && "text-muted-foreground/60")}
+      >
+        {hidden ? <BarChart3 size={11} className="opacity-50" /> : <BarChart3 size={11} />}
+      </button>
+    );
+  };
   const go = useStore((state) => state.go);
   const confirm = useConfirm();
   if (!info) return <div>Checking...</div>;
@@ -460,11 +476,15 @@ function Accounts() {
             {about && !signedOut && <span className="text-muted-foreground/70">{` (${about})`}</span>}
           </span>
         );
+        const showUsage = !signedOut && !hiddenUsage.includes(profile.id);
         if (!several)
           return (
             <div key={profile.id}>
-              <div className="flex min-w-0 items-center">{line}</div>
-              {!signedOut && <UsageBars reading={readingOf(profile.id)} loading={Boolean(pending[profile.id])} />}
+              <div className="group flex min-w-0 items-center gap-1">
+                {line}
+                {!signedOut && <span className="hidden shrink-0 group-hover:flex">{usageToggle(profile)}</span>}
+              </div>
+              {showUsage && <UsageBars reading={readingOf(profile.id)} loading={Boolean(pending[profile.id])} />}
             </div>
           );
         return (
@@ -482,6 +502,7 @@ function Accounts() {
               {line}
             </button>
             <span className="hidden shrink-0 items-center group-hover:flex">
+              {!signedOut && usageToggle(profile)}
               <button onClick={() => void signIn(profile)} title="Open a session under it (sign in with /login)" aria-label={`Sign in to ${profile.name}`} className="rounded p-0.5 hover:bg-muted hover:text-foreground">
                 <LogIn size={11} />
               </button>
@@ -497,7 +518,7 @@ function Accounts() {
               )}
             </span>
           </div>
-          {!signedOut && (
+          {showUsage && (
             <div className="pl-[18px]">
               <UsageBars reading={readingOf(profile.id)} loading={Boolean(pending[profile.id])} />
             </div>
@@ -528,7 +549,9 @@ function ClaudeInfo() {
   const loadProfiles = useProfiles((state) => state.load);
   const loadUsage = useUsage((state) => state.load);
   const accounts = useProfileList();
-  const accountIds = (accounts?.profiles ?? []).filter((profile) => profile.auth?.loggedIn !== false).map((profile) => profile.id);
+  const hiddenUsage = useUsageHidden((state) => state.ids);
+  // Signed in and not hidden here: a hidden account's usage is not read at all.
+  const accountIds = (accounts?.profiles ?? []).filter((profile) => profile.auth?.loggedIn !== false && !hiddenUsage.includes(profile.id)).map((profile) => profile.id);
   const idsKey = accountIds.join(",");
   const recheck = async () => {
     setChecking(true);
@@ -537,7 +560,8 @@ function ClaudeInfo() {
     hub.reload();
     // Usage takes a few seconds per account, each filling in when it is read.
     const fresh = useProfiles.getState().data;
-    void loadUsage((fresh?.profiles ?? []).filter((profile) => profile.auth?.loggedIn !== false).map((profile) => profile.id), true);
+    const hidden = useUsageHidden.getState().ids;
+    void loadUsage((fresh?.profiles ?? []).filter((profile) => profile.auth?.loggedIn !== false && !hidden.includes(profile.id)).map((profile) => profile.id), true);
   };
   // Every signed-in account's usage once known, and again every 15 minutes while the page is open.
   useEffect(() => {
