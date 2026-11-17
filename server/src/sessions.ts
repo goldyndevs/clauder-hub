@@ -7,7 +7,7 @@ import { requireClaudeCode } from "./claudeCode.js";
 import { claudeSettings, mcpSuggestionsEnabled, PERMISSION_MODES, settingFlags } from "./claudeSettings.js";
 import { db, now, parseJson } from "./db.js";
 import { broadcast } from "./events.js";
-import { projectRoot, runDir } from "./paths.js";
+import { projectRoot, runDir, transcriptFile } from "./paths.js";
 import { quietSessions } from "./channels/index.js";
 import { renderPrompt } from "./prompts.js";
 import { sessionDiskBytes } from "./sessionFiles.js";
@@ -294,6 +294,62 @@ export async function restartSession(sessionId: string, options: Pick<StartOptio
     await waitForExit(terminal);
   }
   return startSession({ resumeId: sessionId, ...options, cols: terminal?.cols, rows: terminal?.rows });
+}
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A file or folder moved; Windows may hold a just-closed transcript a moment, and another drive takes a copy. */
+async function moveEntry(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EXDEV") {
+        fs.cpSync(from, to, { recursive: true });
+        fs.rmSync(from, { recursive: true, force: true });
+        return;
+      }
+      if ((code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") || attempt >= 10) throw error;
+      await pause(300);
+    }
+  }
+}
+
+/**
+ * Moves a session to another Claude account: its transcript and its folder
+ * (subagents, tool results) go to that account's folder, the only place
+ * Claude Code looks when it resumes it, so every later resume runs there. A
+ * live session is stopped for the move and resumed under the new account.
+ */
+export async function moveSessionToProfile(sessionId: string, profileId: string): Promise<{ terminalId: string | null }> {
+  const target = getProfile(profileId);
+  if (!target) throw new Error("No such account.");
+  const from = transcriptFile(sessionId);
+  if (!fs.existsSync(from)) throw new Error("This session has nothing saved yet to move.");
+  const terminal = terminalForSession(sessionId);
+  if (profileOfSession(sessionId) === profileId) return { terminalId: terminal?.id ?? null };
+  const toDir = path.join(target.configDir, "projects", path.basename(path.dirname(from)));
+  const to = path.join(toDir, `${sessionId}.jsonl`);
+  if (fs.existsSync(to)) throw new Error(`${target.name} already holds a copy of this session.`);
+  if (terminal) {
+    terminal.restarting = true;
+    killTerminal(terminal);
+    await waitForExit(terminal);
+  }
+  try {
+    fs.mkdirSync(toDir, { recursive: true });
+    await moveEntry(from, to);
+    const folder = from.slice(0, -".jsonl".length);
+    if (fs.existsSync(folder)) await moveEntry(folder, path.join(toDir, sessionId));
+    db.prepare("UPDATE sessions SET profile = ?, updated_at = ? WHERE id = ?").run(profileId, now(), sessionId);
+    broadcast("sessions", { sessionId });
+  } finally {
+    // Resumed under whichever account holds it now: the new one, or the old one if the move failed.
+    if (terminal) startSession({ resumeId: sessionId, cols: terminal.cols, rows: terminal.rows });
+  }
+  return { terminalId: terminalForSession(sessionId)?.id ?? null };
 }
 
 /** The toolset a session has, or will start with on its next resume. */

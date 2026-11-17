@@ -18,7 +18,7 @@ import { currentProject, withProject } from "./context.js";
 import { projectRoot, runDir, toolVersion, transcriptsDir } from "./paths.js";
 import { addProject, allProjects, getProject, listProjects, removeProject, touchProject } from "./projects.js";
 import { promptDefinitions, renderPrompt, setPrompt } from "./prompts.js";
-import { closeOpenSessions, getSessionRow, hubUrl, listSessions, openSessionIds, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
+import { closeOpenSessions, getSessionRow, hubUrl, listSessions, moveSessionToProfile, openSessionIds, terminalByToken, normaliseSetup, restartSession, sessionSetup, sessionToolset, setSessionSetup, setSessionToolset, startSession, systemPromptFor } from "./sessions.js";
 import { resumeOnStart, setResumeOnStart } from "./resume.js";
 import { hubSettings, saveHubSettings } from "./hubSettings.js";
 import { usageOf, usageOfAll } from "./usage.js";
@@ -372,6 +372,12 @@ api.post(
     const terminal = startSession({ resumeId: req.params.id, cols, rows });
     return { sessionId: terminal.sessionId, terminalId: terminal.id };
   }),
+);
+
+/** The session moved to another account's folder; a live one is resumed there. */
+api.post(
+  "/sessions/:id/account",
+  wrap(async (req) => moveSessionToProfile(req.params.id, String(req.body?.profile ?? ""))),
 );
 
 /** Closed from the live panel: stopped when running, and off its list. */

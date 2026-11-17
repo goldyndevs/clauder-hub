@@ -1,12 +1,10 @@
-import { ArrowRight, Play, Square } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { attempt, useLive, useStore } from "../lib/store";
-import { useSessionActions } from "./SessionActions";
-import { StatusDot } from "./Sidebar";
+import { SessionHeader } from "./SessionView";
 import { TerminalView } from "./TerminalView";
 import { Button } from "./ui/Button";
-import { StatusBadge } from "./ui/StatusBadge";
 
 /**
  * A session of another project, shown here without switching to that
@@ -16,11 +14,8 @@ import { StatusBadge } from "./ui/StatusBadge";
  */
 export function ForeignSessionView({ projectId, id }: { projectId: string; id: string }) {
   const sessions = useLive(() => api.sessionsIn(projectId), ["sessions"], projectId);
-  const projects = useLive(() => api.projects(), ["projects"]);
   const switchToSession = useStore((state) => state.switchToSession);
-  const actions = useSessionActions();
   const session = sessions.data?.find((item) => item.id === id) ?? null;
-  const project = projects.data?.find((item) => item.id === projectId);
   const { reload } = sessions;
 
   // Another project's changes do not reach this page's event stream: read again every few seconds.
@@ -47,37 +42,22 @@ export function ForeignSessionView({ projectId, id }: { projectId: string; id: s
 
   if (sessions.error) return <div className="p-6 text-xs text-severity-critical">{sessions.error}</div>;
   if (!sessions.data) return <div className="p-6 text-xs text-muted-foreground">Loading...</div>;
-  if (!session) return <div className="p-6 text-xs text-muted-foreground">This session is no longer in {project?.name ?? projectId}.</div>;
+  if (!session) return <div className="p-6 text-xs text-muted-foreground">This session is no longer in that project.</div>;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-3 border-b px-3 py-2.5 sm:px-5">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <StatusDot session={session} />
-            <h1 className="truncate text-sm font-semibold">{session.title}</h1>
-          </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground [&>*]:shrink-0">
-            <StatusBadge tone="on">{project?.name ?? projectId}</StatusBadge>
-            <StatusBadge tone={session.status === "waiting" ? "warning" : session.status === "running" || session.status === "idle" ? "success" : session.status === "done" ? "on" : "off"}>{session.status}</StatusBadge>
-            <span className="!shrink truncate">Another project's session; the sidebar stays on this one.</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-1.5">
-          {session.live ? (
-            <Button variant="ghost" title="Stop" onClick={() => void actions.stop(session, projectId)}>
-              <Square size={12} /> Stop
-            </Button>
-          ) : (
-            <Button variant="ghost" disabled={opening === "starting"} onClick={() => void resume()}>
-              <Play size={12} /> {opening === "starting" ? "Starting..." : "Resume"}
-            </Button>
-          )}
-          <Button onClick={() => switchToSession(projectId, id)} title="Switch to its project, with its activity, interactions and toolset">
-            Open in its project <ArrowRight size={12} />
+      <SessionHeader
+        session={session}
+        projectId={projectId}
+        resume={resume}
+        resuming={opening === "starting"}
+        onChanged={reload}
+        extra={
+          <Button onClick={() => switchToSession(projectId, id)} title="Switch to its project, with its activity, interactions and toolset" aria-label="Open in its project">
+            <span className="hidden sm:inline">Open in its project</span> <ArrowRight size={12} />
           </Button>
-        </div>
-      </header>
+        }
+      />
       <div className="min-h-0 flex-1 p-2 sm:p-3">
         {session.terminalId ? (
           <TerminalView key={session.terminalId} terminalId={session.terminalId} projectId={projectId} onExit={reload} />

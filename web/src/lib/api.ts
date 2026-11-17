@@ -131,6 +131,10 @@ export const api = {
   /** Another project's session resumed without switching to it. */
   resumeSessionIn: (projectId: string, id: string, size: TerminalSize = {}) =>
     call<{ sessionId: string; terminalId: string }>(`/api/p/${encodeURIComponent(projectId)}/sessions/${id}/resume`, { method: "POST", body: JSON.stringify(size) }),
+  moveSessionAccount: (id: string, profile: string, projectId?: string) =>
+    projectId
+      ? call<{ terminalId: string | null }>(`/api/p/${encodeURIComponent(projectId)}/sessions/${id}/account`, { method: "POST", body: JSON.stringify({ profile }) })
+      : post<{ terminalId: string | null }>(`/sessions/${id}/account`, { profile }),
   resumeSession: (id: string, size: TerminalSize = {}) => post<{ sessionId: string; terminalId: string }>(`/sessions/${id}/resume`, size),
   /** With a project id, a session of that project rather than the open one (the live panel). */
   killSession: (id: string, projectId?: string) =>
@@ -139,14 +143,17 @@ export const api = {
     projectId
       ? call(`/api/p/${encodeURIComponent(projectId)}/sessions/${id}/title`, { method: "PUT", body: JSON.stringify({ title }) })
       : put(`/sessions/${id}/title`, { title }),
-  deletionPlan: (id: string) =>
-    request<{
+  deletionPlan: (id: string, projectId?: string) =>
+    (projectId ? <T,>(url: string) => call<T>(`/api/p/${encodeURIComponent(projectId)}${url}`) : request)<{
       sessionId: string;
       files: Array<{ path: string; bytes: number; what: string }>;
       totalBytes: number;
       temp: { path: string; bytes: number } | null;
     }>(`/sessions/${id}/deletion`),
-  deleteSession: (id: string, clearTemp = true) => del(`/sessions/${id}?temp=${clearTemp ? 1 : 0}`),
+  deleteSession: (id: string, clearTemp = true, projectId?: string) =>
+    projectId
+      ? call(`/api/p/${encodeURIComponent(projectId)}/sessions/${id}?temp=${clearTemp ? 1 : 0}`, { method: "DELETE" })
+      : del(`/sessions/${id}?temp=${clearTemp ? 1 : 0}`),
 
   interactions: (status?: string) => request<Interaction[]>(`/interactions${status ? `?status=${status}` : ""}`),
   answer: (id: string, answer: string) => post<Interaction>(`/interactions/${id}/answer`, { answer }),

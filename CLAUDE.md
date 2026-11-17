@@ -67,7 +67,9 @@ channels (Slack, Telegram, webhooks) that relay what sessions ask.
   project's (Claude settings `account`), else the hub's default (Global page);
   a resume runs under the account whose folder holds its transcript
   (`paths.ts` `transcriptFile`, which looks in every account's folder, as do
-  the transcript list and watcher). The pages that read `~/.claude`
+  the transcript list and watcher). The account chip under a session's title
+  moves it (`sessions.ts` `moveSessionToProfile`: transcript and its folder to
+  the other account's folder, a live one resumed there). The pages that read `~/.claude`
   (inventory, Variables) read the default account's.
 - **A restart picks up where it stopped.** Stopping the hub kills its
   terminals with `stopping` set, so their sessions stay marked live; at the

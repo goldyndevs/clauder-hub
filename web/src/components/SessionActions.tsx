@@ -75,8 +75,9 @@ export function useSessionActions() {
     });
   };
 
-  const remove = async (session: Session) => {
-    const plan = await api.deletionPlan(session.id).catch((error: Error) => {
+  const remove = async (session: Session, projectId?: string) => {
+    const other = here(projectId) ? undefined : projectId;
+    const plan = await api.deletionPlan(session.id, other).catch((error: Error) => {
       useStore.getState().notify(error.message, "error");
       return null;
     });
@@ -115,14 +116,14 @@ export function useSessionActions() {
       tone: "destructive",
       maxWidth: "max-w-xl",
       run: async () => {
-        await api.deleteSession(session.id, clearTemp.current);
-        await useStore.getState().refreshSessions();
+        await api.deleteSession(session.id, clearTemp.current, other);
+        if (!other) await useStore.getState().refreshSessions();
         useStore.getState().notify("Deleted.");
       },
     });
     if (deleted) {
       const { view, go } = useStore.getState();
-      if (view.kind === "session" && view.id === session.id) go({ kind: "page", page: "overview" });
+      if ((view.kind === "session" || view.kind === "foreign") && view.id === session.id) go({ kind: "page", page: "overview" });
     }
     return deleted;
   };

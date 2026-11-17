@@ -1,16 +1,15 @@
-import { Bell, BookOpen, ExternalLink, Pencil, Play, Square, Trash2, Wrench } from "lucide-react";
+import { Bell, BookOpen, Check, ChevronDown, ExternalLink, Pencil, Play, Square, Trash2, UserRound, Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { compact, totalTokens, when } from "../lib/format";
 import { profileLabel, useProfileList } from "../lib/profiles";
-import { attempt, openWindow, useStore } from "../lib/store";
-import type { Interaction, SessionDetail } from "../lib/types";
+import { attempt, openWindow, useLive, useStore } from "../lib/store";
+import type { Interaction, Session, SessionDetail } from "../lib/types";
 import { Activity } from "./Activity";
 import { useConfirm } from "./Confirm";
-import { useStopConfirm } from "../lib/hubSettings";
 import { InteractionCard } from "./InteractionCard";
-import { focusNeighbourTerminal, useSessionActions } from "./SessionActions";
+import { useSessionActions } from "./SessionActions";
 import { SessionSetup } from "./SessionSetup";
 import { SessionToolset } from "./SessionToolset";
 import { StatusDot } from "./Sidebar";
@@ -20,6 +19,7 @@ import { Markdown } from "./ui/Markdown";
 import { CopyButton } from "./ui/CopyId";
 import { Empty } from "./ui/Empty";
 import { SideDrawer } from "./ui/SideDrawer";
+import { Popover } from "./ui/Popover";
 import { StatusBadge } from "./ui/StatusBadge";
 
 type Tab = "terminal" | "activity" | "setup" | "toolset" | "interactions";
@@ -32,10 +32,6 @@ export function SessionView({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab>("terminal");
   const [missing, setMissing] = useState(false);
   const windowed = useStore((state) => state.windowed);
-  const confirm = useConfirm();
-  const confirmStop = useStopConfirm();
-  const actions = useSessionActions();
-  const accountName = profileLabel(useProfileList(), session?.profile);
 
   // Opening a session opens its terminal: one that is not running is resumed straight away.
   // Decided once per visit, so stopping it here does not bring it back on its own.
@@ -77,75 +73,10 @@ export function SessionView({ id }: { id: string }) {
 
   const open = (data?.interactions ?? []).filter((item) => item.status === "open");
   const resume = () => attempt(() => api.resumeSession(id));
-  const kill = () =>
-    confirmStop({
-      title: "Stop this session?",
-      description: "The conversation is kept for a later resume.",
-      confirmLabel: "Stop",
-      tone: "destructive",
-      run: async () => {
-        await api.killSession(id);
-        focusNeighbourTerminal([id]);
-      },
-    });
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-3 border-b px-3 py-3 sm:px-5">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <StatusDot session={session} />
-            <h1 className="truncate text-sm font-semibold">{session.title}</h1>
-          </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground [&>*]:shrink-0">
-            <StatusBadge tone={session.status === "waiting" ? "warning" : session.status === "running" || session.status === "idle" ? "success" : session.status === "done" ? "on" : "off"}>{session.status}</StatusBadge>
-            <StatusBadge tone="off">{session.origin === "external" ? "started in a terminal" : `from ${session.origin}`}</StatusBadge>
-            {session.category && <StatusBadge tone="off">category: {session.category}</StatusBadge>}
-            {accountName && <StatusBadge tone="off">account: {accountName}</StatusBadge>}
-            {session.purpose && (
-              <StatusBadge tone="on" icon={Wrench}>
-                hub task: {session.purpose.title}
-              </StatusBadge>
-            )}
-            <span>{when(session.startedAt)}</span>
-            {session.tokens && <span>· {compact(totalTokens(session.tokens))} tokens</span>}
-            {/* The full Claude Code session id, the one `claude --resume` takes. */}
-            <span className="inline-flex min-w-0 !shrink items-center gap-1 font-mono" title={`Claude Code session id: ${session.id}`}>
-              <span className="truncate">{session.id}</span>
-              <CopyButton text={session.id} />
-            </span>
-          </div>
-        </div>
-        {/* Below sm the labelled buttons keep only their icon; the label stays as title and aria-label. */}
-        <div className="flex shrink-0 gap-1.5">
-          <Button variant="ghost" size="icon" title="Rename" aria-label="Rename" onClick={() => void actions.rename(session)}>
-            <Pencil size={13} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            title={session.live ? "Stop and delete permanently" : "Delete permanently"}
-            aria-label="Delete permanently"
-            onClick={() => void actions.remove(session)}
-          >
-            <Trash2 size={13} />
-          </Button>
-          {!windowed && (
-            <Button variant="ghost" title="Open in a window of its own" aria-label="New window" onClick={() => openWindow({ kind: "session", id })}>
-              <ExternalLink size={12} /> <span className="hidden sm:inline">New window</span>
-            </Button>
-          )}
-          {session.live ? (
-            <Button variant="muted" title="Stop" aria-label="Stop" onClick={() => void kill()}>
-              <Square size={12} /> <span className="hidden sm:inline">Stop</span>
-            </Button>
-          ) : (
-            <Button variant="primary" title="Resume here" aria-label="Resume here" onClick={() => void resume()}>
-              <Play size={12} /> <span className="hidden sm:inline">Resume here</span>
-            </Button>
-          )}
-        </div>
-      </header>
+      <SessionHeader session={session} resume={resume} />
 
       {/* One row that scrolls sideways when it does not fit, never a second line. */}
       <div className="no-scrollbar flex gap-1 overflow-x-auto border-b px-2 sm:px-4">
@@ -225,6 +156,154 @@ export function SessionView({ id }: { id: string }) {
       </div>
     </div>
   );
+}
+
+
+/**
+ * A session's title, what it is and what can be done to it. `projectId` names
+ * another project's session shown here (ForeignSessionView): every action then
+ * goes to that project, and `extra` adds its way into it.
+ */
+export function SessionHeader({
+  session,
+  projectId,
+  resume,
+  resuming = false,
+  extra,
+  onChanged,
+}: {
+  session: Session;
+  projectId?: string;
+  resume: () => unknown;
+  resuming?: boolean;
+  extra?: React.ReactNode;
+  /** Called after an action that changes the session, for a view that does not get this project's events. */
+  onChanged?: () => void;
+}) {
+  const windowed = useStore((state) => state.windowed);
+  const confirm = useConfirm();
+  const actions = useSessionActions();
+  const accounts = useProfileList();
+  const accountName = profileLabel(accounts, session.profile);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const after = async (done: unknown) => {
+    if (done) onChanged?.();
+  };
+
+  const moveTo = (profileId: string, name: string) => {
+    setAccountOpen(false);
+    if (profileId === (session.profile ?? "default")) return;
+    void confirm({
+      title: `Move this session to ${name}?`,
+      description: session.live
+        ? `Its conversation moves to ${name}'s folder and it restarts there; from now on it runs and resumes under ${name}.`
+        : `Its conversation moves to ${name}'s folder; from now on it resumes under ${name}.`,
+      confirmLabel: "Move",
+      run: async () => {
+        await api.moveSessionAccount(session.id, profileId, projectId);
+      },
+    }).then(after);
+  };
+
+  return (
+    <header className="flex items-center gap-3 border-b px-3 py-3 sm:px-5">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <StatusDot session={session} />
+          <h1 className="truncate text-sm font-semibold">{session.title}</h1>
+        </div>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground [&>*]:shrink-0">
+          {projectId && <ProjectBadge projectId={projectId} />}
+          <StatusBadge tone={session.status === "waiting" ? "warning" : session.status === "running" || session.status === "idle" ? "success" : session.status === "done" ? "on" : "off"}>{session.status}</StatusBadge>
+          {session.origin !== "manual" && <StatusBadge tone="off">{session.origin === "external" ? "started in a terminal" : `from ${session.origin}`}</StatusBadge>}
+          {session.category && <StatusBadge tone="off">category: {session.category}</StatusBadge>}
+          {accounts && accounts.profiles.length > 1 ? (
+            <Popover
+              open={accountOpen}
+              onOpenChange={setAccountOpen}
+              className="w-60 p-1"
+              trigger={
+                <button className="shrink-0 rounded-full" title="Move this session to another account" aria-label="Change the session's account">
+                  <StatusBadge tone="off" className="hover:bg-muted-foreground/20 hover:text-foreground">
+                    account: {accountName ?? "Default"} <ChevronDown size={10} />
+                  </StatusBadge>
+                </button>
+              }
+            >
+              <div className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Run under</div>
+              {accounts.profiles.map((profile) => (
+                <button
+                  key={profile.id}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                  title={profile.auth?.account ?? profile.configDir}
+                  onClick={() => moveTo(profile.id, profile.name)}
+                >
+                  <UserRound size={13} className="shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate">{profile.name}</span>
+                  {profile.id === (session.profile ?? "default") && <Check size={13} className="shrink-0 text-primary" />}
+                </button>
+              ))}
+            </Popover>
+          ) : (
+            accountName && <StatusBadge tone="off">account: {accountName}</StatusBadge>
+          )}
+          {session.purpose && (
+            <StatusBadge tone="on" icon={Wrench}>
+              hub task: {session.purpose.title}
+            </StatusBadge>
+          )}
+          <span>{when(session.startedAt)}</span>
+          {session.tokens && <span>· {compact(totalTokens(session.tokens))} tokens</span>}
+          {/* The full Claude Code session id, the one `claude --resume` takes. */}
+          <span className="inline-flex min-w-0 !shrink items-center gap-1 font-mono" title={`Claude Code session id: ${session.id}`}>
+            <span className="truncate">{session.id}</span>
+            <CopyButton text={session.id} />
+          </span>
+        </div>
+      </div>
+      {/* Below sm the labelled buttons keep only their icon; the label stays as title and aria-label. */}
+      <div className="flex shrink-0 gap-1.5">
+        <Button variant="ghost" size="icon" title="Rename" aria-label="Rename" onClick={() => void actions.rename(session, projectId).then(after)}>
+          <Pencil size={13} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title={session.live ? "Stop and delete permanently" : "Delete permanently"}
+          aria-label="Delete permanently"
+          onClick={() => void actions.remove(session, projectId)}
+        >
+          <Trash2 size={13} />
+        </Button>
+        {!windowed && (
+          <Button
+            variant="ghost"
+            title="Open in a window of its own"
+            aria-label="New window"
+            onClick={() => openWindow(projectId ? { kind: "foreign", projectId, id: session.id } : { kind: "session", id: session.id })}
+          >
+            <ExternalLink size={12} /> <span className="hidden sm:inline">New window</span>
+          </Button>
+        )}
+        {session.live ? (
+          <Button variant="muted" title="Stop" aria-label="Stop" onClick={() => void actions.stop(session, projectId).then(after)}>
+            <Square size={12} /> <span className="hidden sm:inline">Stop</span>
+          </Button>
+        ) : (
+          <Button variant="primary" title="Resume here" aria-label="Resume here" disabled={resuming} onClick={() => void resume()}>
+            <Play size={12} /> <span className="hidden sm:inline">{resuming ? "Starting..." : "Resume here"}</span>
+          </Button>
+        )}
+        {extra}
+      </div>
+    </header>
+  );
+}
+
+/** The project another project's session belongs to, by name. */
+function ProjectBadge({ projectId }: { projectId: string }) {
+  const projects = useLive(() => api.projects(), ["projects"]);
+  return <StatusBadge tone="on">{projects.data?.find((item) => item.id === projectId)?.name ?? projectId}</StatusBadge>;
 }
 
 /**
