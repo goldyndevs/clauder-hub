@@ -140,5 +140,15 @@ export function useSessionActions() {
       },
     });
 
-  return { rename, remove, stop };
+  /** The Claude Code session id, the one `claude --resume` takes, onto the clipboard. */
+  const copyId = async (session: Pick<Session, "id">) => {
+    try {
+      await navigator.clipboard.writeText(session.id);
+      useStore.getState().notify("Session UUID copied.");
+    } catch {
+      useStore.getState().notify("The clipboard is blocked here.", "error");
+    }
+  };
+
+  return { rename, remove, stop, copyId };
 }

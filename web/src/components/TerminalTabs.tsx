@@ -1,4 +1,4 @@
-import { ArrowRight, Pencil, SquareTerminal, X, XCircle } from "lucide-react";
+import { ArrowRight, Copy, Pencil, SquareTerminal, X, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -26,7 +26,7 @@ export function TabMenu({ x, y, items, onClose }: { x: number; y: number; items:
     <div
       role="menu"
       className="fixed z-50 w-44 rounded-lg border bg-card p-1 shadow-lg"
-      style={{ left: Math.min(x, window.innerWidth - 184), top: Math.min(y, window.innerHeight - 180) }}
+      style={{ left: Math.min(x, window.innerWidth - 184), top: Math.max(8, Math.min(y, window.innerHeight - 16 - items.length * 30)) }}
       onPointerDown={(event) => event.stopPropagation()}
     >
       {items.map(([label, Icon, run, separated, disabled]) => (
@@ -100,6 +100,7 @@ export function TerminalTabs() {
           items={[
             ["Open", ArrowRight, () => go({ kind: "session", id: menu.session.id })],
             ["Rename", Pencil, () => void actions.rename(menu.session)],
+            ["Copy session UUID", Copy, () => void actions.copyId(menu.session)],
             ["Close", X, () => void stop(menu.session), true],
             ["Close Others", XCircle, () => void stopMany(live.filter((session) => session.id !== menu.session.id), false), false, live.length < 2],
             ["Close All", XCircle, () => void stopMany(live, true)],

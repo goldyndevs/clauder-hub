@@ -1,41 +1,4 @@
-import {
-  ArrowRight,
-  Bell,
-  BellOff,
-  BookText,
-  Bot,
-  CalendarClock,
-  ExternalLink,
-  ChevronDown,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Command,
-  KeyRound,
-  UserRound,
-  LayoutDashboard,
-  Menu,
-  MoreHorizontal,
-  Pencil,
-  Play,
-  MessageSquareText,
-  Layers,
-  ListX,
-  Plug,
-  PlugZap,
-  Plus,
-  Puzzle,
-  Radio,
-  Search,
-  SlidersHorizontal,
-  Square,
-  Sparkles,
-  Tags,
-  Trash2,
-  Webhook,
-  Wrench,
-  X,
-} from "lucide-react";
+import { ArrowRight, Bell, BellOff, BookText, Bot, CalendarClock, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, Command, Copy, ExternalLink, KeyRound, Layers, LayoutDashboard, ListX, Menu, MessageSquareText, MoreHorizontal, Pencil, Play, Plug, PlugZap, Plus, Puzzle, Radio, Search, SlidersHorizontal, Sparkles, Square, Tags, Trash2, UserRound, Webhook, Wrench, X } from "lucide-react";
 import { GitStatus } from "./GitStatus";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../lib/cn";
@@ -561,12 +524,13 @@ function SessionMenu({ session, x, y, onClose }: { session: Session; x: number; 
       role="menu"
       className="fixed z-50 w-48 rounded-lg border bg-card p-1 shadow-lg"
       // Kept inside the window when opened near its bottom or right edge.
-      style={{ left: Math.min(x, window.innerWidth - 200), top: Math.min(y, window.innerHeight - 270) }}
+      style={{ left: Math.min(x, window.innerWidth - 200), top: Math.min(y, window.innerHeight - 300) }}
       onPointerDown={(event) => event.stopPropagation()}
     >
       {item("Open", ArrowRight, () => go({ kind: "session", id: session.id }))}
       {item("Open in new window", ExternalLink, () => openWindow({ kind: "session", id: session.id }))}
       {item("Rename", Pencil, () => void actions.rename(session))}
+      {item("Copy session UUID", Copy, () => void actions.copyId(session))}
       <div className="my-1 border-t" />
       {session.quiet
         ? item("Allow notifications", Bell, () => void attempt(() => api.setSessionQuiet(session.id, false), "Notifications back on for this session."))

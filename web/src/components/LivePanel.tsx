@@ -1,4 +1,4 @@
-import { ArrowRight, History, ListX, PanelRight, PanelRightClose, Pencil, Plus, X, XCircle } from "lucide-react";
+import { ArrowRight, Copy, History, ListX, PanelRight, PanelRightClose, Pencil, Plus, X, XCircle } from "lucide-react";
 import { useState } from "react";
 import { create } from "zustand";
 import { api } from "../lib/api";
@@ -278,6 +278,7 @@ function ProjectGroup({ project }: { project: LiveProject }) {
             ["Open", ArrowRight, () => openSessionIn(project.id, menu.session.id)],
             ["Open in its project", ArrowRight, () => useStore.getState().switchToSession(project.id, menu.session.id), false, useStore.getState().projectId === project.id],
             ["Rename", Pencil, () => void actions.rename(menu.session, project.id)],
+            ["Copy session UUID", Copy, () => void actions.copyId(menu.session)],
             ["Close", X, () => void close([menu.session], "it"), true],
             ["Close Stopped", ListX, () => void close(project.open.filter((session) => !session.live), "the stopped ones"), false, !project.open.some((session) => !session.live)],
             ["Close Others", XCircle, () => void close(project.open.filter((session) => session.id !== menu.session.id), "the others"), false, project.open.length < 2],

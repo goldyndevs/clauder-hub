@@ -54,7 +54,7 @@ export function ForeignSessionView({ projectId, id }: { projectId: string; id: s
         onChanged={reload}
         extra={
           <Button onClick={() => switchToSession(projectId, id)} title="Switch to its project, with its activity, interactions and toolset" aria-label="Open in its project">
-            <span className="hidden sm:inline">Open in its project</span> <ArrowRight size={12} />
+            <span className="hidden sm:inline">Its project</span> <ArrowRight size={12} />
           </Button>
         }
       />

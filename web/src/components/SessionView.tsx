@@ -278,11 +278,12 @@ export function SessionHeader({
         {!windowed && (
           <Button
             variant="ghost"
+            size="icon"
             title="Open in a window of its own"
             aria-label="New window"
             onClick={() => openWindow(projectId ? { kind: "foreign", projectId, id: session.id } : { kind: "session", id: session.id })}
           >
-            <ExternalLink size={12} /> <span className="hidden sm:inline">New window</span>
+            <ExternalLink size={13} />
           </Button>
         )}
         {session.live ? (
